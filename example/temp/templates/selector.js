@@ -41,25 +41,25 @@
       (function() {
         var note, _i, _len, _ref;
       
-        __out.push('<ul>\n  <li id="new" class="note ');
+        __out.push('<div>\n  <ul>\n    <li id="new" class="note ');
       
         __out.push(__sanitize(!(this.selected != null) || this.selected === "new" ? "selected" : ""));
       
-        __out.push('">New Note</li>\n  \n  ');
+        __out.push('">New Note</li>\n  \n    ');
       
         _ref = this.notes;
         for (_i = 0, _len = _ref.length; _i < _len; _i++) {
           note = _ref[_i];
-          __out.push('\n    <li id="');
+          __out.push('\n      <li id="');
           __out.push(__sanitize(note.id));
           __out.push('" class="note ');
           __out.push(__sanitize((this.selected != null) && note.id.toString() === this.selected.toString() ? "selected" : ""));
           __out.push('">');
           __out.push(__sanitize(note.name));
-          __out.push('</li>\n  ');
+          __out.push('</li>\n    ');
         }
       
-        __out.push('\n</ul>');
+        __out.push('\n  </ul>\n</div>');
       
       }).call(this);
       

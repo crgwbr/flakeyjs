@@ -1,7 +1,9 @@
-<ul>
-  <li id="new" class="note <%= if not @selected? or @selected == "new" then "selected" else "" %>">New Note</li>
+<div>
+  <ul>
+    <li id="new" class="note <%= if not @selected? or @selected == "new" then "selected" else "" %>">New Note</li>
   
-  <% for note in @notes: %>
-    <li id="<%= note.id %>" class="note <%= if @selected? and (note.id).toString() == @selected.toString() then "selected" else "" %>"><%= note.name %></li>
-  <% end %>
-</ul>
+    <% for note in @notes: %>
+      <li id="<%= note.id %>" class="note <%= if @selected? and (note.id).toString() == @selected.toString() then "selected" else "" %>"><%= note.name %></li>
+    <% end %>
+  </ul>
+</div>

@@ -53,12 +53,14 @@
     __extends(NoteEditor, _super);
 
     function NoteEditor(config) {
+      this.evolve = __bind(this.evolve, this);
       this.delete_note = __bind(this.delete_note, this);
       this.save_note = __bind(this.save_note, this);      this.id = 'note-editor';
       this.class_name = 'note-editor view';
       this.actions = {
         'click #save-note': 'save_note',
-        'click #delete-note': 'delete_note'
+        'click #delete-note': 'delete_note',
+        'change #history-slider': 'evolve'
       };
       NoteEditor.__super__.constructor.call(this, config);
       this.tmpl = Flakey.templates.get_template('editor', require('./templates/editor'));
@@ -66,6 +68,7 @@
 
     NoteEditor.prototype.render = function() {
       var context, note;
+      this.unbind_actions();
       context = {
         note: {}
       };
@@ -73,11 +76,13 @@
         note = models.Note.objects.get(this.query_params.id);
       }
       if (note != null) context.note = note;
-      return this.html(this.tmpl.render(context));
+      this.html(this.tmpl.render(context));
+      return this.bind_actions();
     };
 
     NoteEditor.prototype.save_note = function(event) {
       var note;
+      this.unbind_actions();
       if (this.query_params.id != null) {
         note = models.Note.objects.get(this.query_params.id);
       }
@@ -85,13 +90,18 @@
       note.name = $('#name').val();
       note.content = $('#content').val();
       note.save();
-      return Flakey.util.querystring.update({
+      Flakey.util.querystring.update({
         id: note.id
       });
+      this.html(this.tmpl.render({
+        note: note
+      }));
+      return this.bind_actions();
     };
 
     NoteEditor.prototype.delete_note = function(event) {
       var id, note;
+      this.unbind_actions();
       if (this.query_params.id != null) {
         note = models.Note.objects.get(this.query_params.id);
         id = note.id;
@@ -100,9 +110,25 @@
           id = 'new';
         }
       }
-      return Flakey.util.querystring.update({
+      Flakey.util.querystring.update({
         id: id
       });
+      return this.bind_actions();
+    };
+
+    NoteEditor.prototype.evolve = function() {
+      var note, time, version, version_id, version_index;
+      this.unbind_actions();
+      version_index = $('#history-slider').val();
+      note = models.Note.objects.get(this.query_params.id);
+      version_id = note.versions[version_index].version_id;
+      time = new Date(note.versions[version_index].time);
+      console.log(time.toString());
+      version = note.evolve(version_id);
+      $('#name').val(version.name);
+      $('#content').val(version.content);
+      $('#when').html(time.toLocaleString());
+      return this.bind_actions();
     };
 
     return NoteEditor;

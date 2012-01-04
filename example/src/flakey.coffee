@@ -1,5 +1,5 @@
 # ==========================================
-# Compiled: Wed Jan 04 2012 12:57:36 GMT-0500 (EST)
+# Compiled: Wed Jan 04 2012 16:37:22 GMT-0500 (EST)
 
 # Contents:
 #   - src/lib/diff_match_patch.js
@@ -11967,6 +11967,10 @@ Flakey = {
     diff_text: true
     container: undefined
     read_backend: 'memory'
+    base_model_endpoint: null #'/api'
+  }
+  status: {
+    server_online: undefined 
   }
 }
 
@@ -12151,7 +12155,7 @@ class Model
           obj[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0]
         else
           obj[key] = value
-      if version_id != undefined and version_id == rev.verson_id
+      if version_id != undefined and version_id == rev.version_id
         return obj
     return obj
     
@@ -12197,6 +12201,14 @@ class BackendController
         interface: new LocalBackend()
       }
     }
+    
+    if Flakey.settings.base_model_endpoint
+      @backends['server'] = {
+        log_key: 'flakey-server-log'
+        pending_log: []
+        interface: new ServerBackend()
+      }
+    
     @read = Flakey.settings.read_backend || 'memory' # Backend to use for read operations
     @load_logs()
     
@@ -12216,7 +12228,7 @@ class BackendController
       if backend.pending_log.length
         backend.pending_log.push(log_msg)
         @commit_logs()
-        @exec_log({bname: backend})
+        @exec_log()
         return false
       if not backend.interface.save(name, id, versions)
         backend.pending_log.push(log_msg)
@@ -12230,7 +12242,7 @@ class BackendController
       if backend.pending_log.length
         backend.pending_log.push(log_msg)
         @commit_logs()
-        @exec_log({name: backend})
+        @exec_log()
         return false
       if not backend.interface.delete(name, id)
         backend.pending_log.push(log_msg)
@@ -12239,17 +12251,21 @@ class BackendController
     return true
   
   # Log methods
-  exec_log: (backends = @backends) ->
-    for own name, backend of backends
-      while msg = backend.pending_log.shift()
-        action = @[msg.split(@delim)]
-        fn = action[0]
+  exec_log: () ->
+    for own name, backend of @backends
+      log = backend.pending_log
+      for msg in log
+        action = msg.split(@delim)
+        fn = Flakey.models.backend_controller.backends[name].interface[action[0]]
         params = JSON.parse(action[1])
-        params.push({name: backend})
-        if not action.apply(@, params)
-          backend.pending_log.unshift(msg)
+        bends = {}
+        bends[name] = backend
+        params.push(bends)
+        if fn.apply(Flakey.models.backend_controller.backends[name].interface, params)
+          backend.pending_log.shift()
+        else
           break;
-        @commit_logs()
+    @commit_logs()
           
   commit_logs: (backends = @backends) ->
     for own name, backend of backends
@@ -12424,6 +12440,98 @@ class LocalBackend extends Backend
   _write: (name, store) ->
     localStorage[@prefix + name] = JSON.stringify(store)
     return true
+    
+
+# Server storage backend
+class ServerBackend extends Backend
+  build_endpoint_url: (name, id, params) ->
+    url = "#{Flakey.settings.base_model_endpoint}/#{name}"
+    if id? then url += "/#{id}"
+    if params? and params.constructor == Object
+      querystring = Flakey.util.querystring.build(params)
+      url += "?#{querystring}"
+    return url
+    
+  # List all objects from the given store
+  all: (name) ->
+    store = false
+    $.ajax({
+      async: false
+      url: @build_endpoint_url(name)
+      dataType: 'json'
+      error: () ->
+        Flakey.status.server_online = false
+      success: (data) ->
+        Flakey.status.server_online = true
+        store = data
+      type: 'GET'
+    })
+    return store
+
+  # Get an object from the given store by its id
+  get: (name, id) ->
+    obj = false
+    $.ajax({
+      async: false
+      url: @build_endpoint_url(name, id)
+      dataType: 'json'
+      error: () ->
+        Flakey.status.server_online = false
+      success: (data) ->
+        Flakey.status.server_online = true
+        obj = data
+      type: 'GET'
+    })
+    return obj
+
+  # Save an object to the store  
+  save: (name, id, versions) ->
+    status = false
+    $.ajax({
+      async: false
+      url: @build_endpoint_url(name, id)
+      data: Flakey.util.querystring.build({id: id, versions: JSON.stringify(versions)})
+      dataType: 'json'
+      error: () ->
+        Flakey.status.server_online = false
+      success: () ->
+        Flakey.status.server_online = true
+        status = true
+      type: 'POST'
+    })
+    return status
+
+  # Delete an item by id
+  delete: (name, id) ->
+    status = false
+    $.ajax({
+      async: false
+      url: @build_endpoint_url(name, id)
+      dataType: 'json'
+      error: () ->
+        Flakey.status.server_online = false
+      success: () ->
+        Flakey.status.server_online = true
+        status = true
+      type: 'DELETE'
+    })
+    return status
+
+  _query: (name, query) ->
+    throw new TypeError("_query not supported on server backend")
+
+  _query_by_id: (name, id) ->
+    throw new TypeError("_query_by_id not supported on server backend")
+    
+  _read: (name) ->
+    return @all(name)
+
+  _write: (name, store) ->
+    status = true
+    for item in store
+      if not @save(name, item.id, item.versions)
+        status = false
+    return status
 
 
 Flakey.models = {
@@ -12477,7 +12585,7 @@ class Controller
     for own key, fn of @actions
       key_parts = key.split(' ')
       action = key_parts.shift()
-      selector = key_part.join(' ')
+      selector = key_parts.join(' ')
       $(selector).unbind(action, @[fn])
   
   html: (htm) ->

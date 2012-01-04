@@ -43,7 +43,7 @@ class Controller
     for own key, fn of @actions
       key_parts = key.split(' ')
       action = key_parts.shift()
-      selector = key_part.join(' ')
+      selector = key_parts.join(' ')
       $(selector).unbind(action, @[fn])
   
   html: (htm) ->

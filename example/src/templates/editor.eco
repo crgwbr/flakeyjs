@@ -3,5 +3,19 @@
   <textarea name="content" id="content"><%= @note.content || "Type you note here..." %></textarea>
     
   <input type="button" id="save-note" name="save-note" value="Save Note" />
+  
+  <% if @note.versions: %>
+    <% saved = (new Date(@note.versions[@note.versions.length-1].time)) %>
+    <div id="last-saved">Last saved on: <%= saved.toLocaleString() %></div>
+  <% end %>
+  
+  <% if @note.versions.length > 1: %>
+    <div id="history">
+      <label for="history-slider">History</label>
+      <input id="history-slider" name="history-slider" type="range" min="0" max="<%= @note.versions.length-1 %>" step="1" value="<%= @note.versions.length-1 %>" />
+    </div>
+    <div id="when"></div>
+  <% end %>
+  
   <input type="button" id="delete-note" name="delete-note" value="Delete Note" />
 </div>

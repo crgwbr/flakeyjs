@@ -2529,924 +2529,7 @@ this['diff_match_patch'] = diff_match_patch;
 this['DIFF_DELETE'] = DIFF_DELETE;
 this['DIFF_INSERT'] = DIFF_INSERT;
 this['DIFF_EQUAL'] = DIFF_EQUAL;
-;
-  var $, Backend, BackendController, Controller, Events, Flakey, JSON, LocalBackend, MemoryBackend, Model, Stack, Template, get_template,
-    __hasProp = Object.prototype.hasOwnProperty,
-    __indexOf = Array.prototype.indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; },
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; },
-    __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
-
-  Flakey = {
-    diff_patch: new diff_match_patch(),
-    settings: {
-      diff_text: true,
-      container: void 0,
-      read_backend: 'memory'
-    }
-  };
-
-  $ = Flakey.$ = require('jqueryify');
-
-  JSON = Flakey.JSON = require('jsonify');
-
-  Flakey.init = function(config) {
-    var key, value, _results;
-    _results = [];
-    for (key in config) {
-      if (!__hasProp.call(config, key)) continue;
-      value = config[key];
-      _results.push(Flakey.settings[key] = value);
-    }
-    return _results;
-  };
-
-  if (window) window.Flakey = Flakey;
-
-  Flakey.util = {
-    guid: function() {
-      var guid;
-      guid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx';
-      guid = guid.replace(/[xy]/g, function(c) {
-        var r, v;
-        r = Math.random() * 16 | 0;
-        if (c === 'x') {
-          v = r;
-        } else {
-          v = r & 3 | 8;
-        }
-        v.toString(16).toUpperCase();
-        return v;
-      });
-      return guid;
-    },
-    get_hash: function() {
-      var hash;
-      hash = window.location.hash;
-      if (hash.indexOf('#') === 0) hash = hash.slice(1);
-      return hash;
-    },
-    querystring: {
-      parse: function(str) {
-        var key, pair, pairs, params, value, _i, _len;
-        if (!str || str.constructor !== String) return {};
-        pairs = str.split('&');
-        params = {};
-        for (_i = 0, _len = pairs.length; _i < _len; _i++) {
-          pair = pairs[_i];
-          pair = pair.split('=');
-          key = decodeURIComponent(pair[0]);
-          value = decodeURIComponent(pair[1]);
-          params[key] = value;
-        }
-        return params;
-      },
-      build: function(params) {
-        var key, pairs, value;
-        if (!params || params.constructor !== Object) return "";
-        pairs = [];
-        for (key in params) {
-          if (!__hasProp.call(params, key)) continue;
-          value = params[key];
-          pairs.push("" + (encodeURIComponent(key)) + "=" + (encodeURIComponent(value)));
-        }
-        return pairs.join('&');
-      },
-      update: function(params, merge) {
-        var hash, location, query;
-        if (merge == null) merge = false;
-        hash = Flakey.util.get_hash();
-        if (hash.indexOf('?')) {
-          hash = hash.split('?');
-          location = hash[0];
-          query = Flakey.util.querystring.parse(hash[1]);
-        } else {
-          location = hash;
-          query = {};
-        }
-        if (merge) {
-          $.extend(query, params);
-        } else {
-          query = params;
-        }
-        return window.location.hash = "" + location + "?" + (Flakey.util.querystring.build(query));
-      }
-    }
-  };
-
-  Events = (function() {
-
-    function Events() {}
-
-    Events.prototype.events = {};
-
-    Events.prototype.register = function(event, fn, namespace) {
-      if (namespace == null) namespace = "flakey";
-      if (this.events[namespace] === void 0) this.events[namespace] = {};
-      if (this.events[namespace][event] === void 0) {
-        this.events[namespace][event] = [];
-      }
-      this.events[namespace][event].push(fn);
-      return this.events[namespace][event];
-    };
-
-    Events.prototype.trigger = function(event, namespace) {
-      var fn, output, _i, _len, _ref;
-      if (namespace == null) namespace = "flakey";
-      if (this.events[namespace] === void 0) this.events[namespace] = {};
-      if (this.events[namespace][event] === void 0) return;
-      output = [];
-      _ref = this.events[namespace][event];
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        fn = _ref[_i];
-        output.push(fn());
-      }
-      return output;
-    };
-
-    Events.prototype.clear = function(namespace) {
-      if (namespace == null) namespace = "flakey";
-      return this.events[namespace] = {};
-    };
-
-    return Events;
-
-  })();
-
-  Flakey.events = new Events();
-
-  Model = (function() {
-
-    Model.model_name = null;
-
-    Model.fields = ['id'];
-
-    Model.objects = {
-      constructor: Model,
-      get: function(id) {
-        var m, obj;
-        obj = Flakey.models.backend_controller.get(this.constructor.model_name, id);
-        if (!obj) return;
-        m = new this.constructor();
-        m["import"](obj);
-        return m;
-      },
-      all: function() {
-        var m, obj, set, _i, _len, _ref;
-        set = [];
-        _ref = Flakey.models.backend_controller.all(this.constructor.model_name);
-        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-          obj = _ref[_i];
-          m = new this.constructor();
-          m["import"](obj);
-          set.push(m);
-        }
-        return set;
-      }
-    };
-
-    function Model() {
-      this.id = Flakey.util.guid();
-      this.versions = [];
-    }
-
-    Model.prototype.diff = function(new_obj, old_obj) {
-      var key, patches, save, _i, _len, _ref;
-      save = {};
-      _ref = Object.keys(new_obj);
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        key = _ref[_i];
-        if (new_obj[key] !== old_obj[key]) {
-          if (new_obj[key].constructor === String) {
-            old_obj[key] = old_obj[key] != null ? old_obj[key].toString() : "";
-          }
-          if (new_obj[key].constructor === String && old_obj[key].constructor === String && Flakey.settings.diff_text) {
-            patches = Flakey.diff_patch.patch_make(old_obj[key], new_obj[key]);
-            save[key] = {
-              constructor: "Patch",
-              patch_text: Flakey.diff_patch.patch_toText(patches)
-            };
-          } else {
-            save[key] = new_obj[key];
-          }
-        }
-      }
-      return save;
-    };
-
-    Model.prototype["export"] = function() {
-      var field, obj, _i, _len, _ref;
-      obj = {};
-      _ref = this.constructor.fields;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        field = _ref[_i];
-        obj[field] = this[field];
-      }
-      return obj;
-    };
-
-    Model.prototype.evolve = function(version_id) {
-      var key, obj, patches, rev, value, _i, _len, _ref, _ref2;
-      obj = {};
-      _ref = this.versions;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        rev = _ref[_i];
-        _ref2 = rev.fields;
-        for (key in _ref2) {
-          if (!__hasProp.call(_ref2, key)) continue;
-          value = _ref2[key];
-          if (value.constructor === "Patch") {
-            patches = Flakey.diff_patch.patch_fromText(value.patch_text);
-            obj[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || "")[0];
-          } else {
-            obj[key] = value;
-          }
-        }
-        if (version_id !== void 0 && version_id === rev.verson_id) return obj;
-      }
-      return obj;
-    };
-
-    Model.prototype["import"] = function(obj) {
-      var key, value, _ref, _results;
-      this.versions = obj.versions;
-      this.id = obj.id;
-      _ref = this.evolve();
-      _results = [];
-      for (key in _ref) {
-        if (!__hasProp.call(_ref, key)) continue;
-        value = _ref[key];
-        _results.push(this[key] = value);
-      }
-      return _results;
-    };
-
-    Model.prototype.push_version = function(diff) {
-      var version_id;
-      version_id = Flakey.util.guid();
-      return this.versions.push({
-        version_id: version_id,
-        time: +(new Date()),
-        fields: diff
-      });
-    };
-
-    Model.prototype.save = function() {
-      var diff, new_obj, old_obj;
-      new_obj = this["export"]();
-      old_obj = this.evolve();
-      diff = this.diff(new_obj, old_obj);
-      if (Object.keys(diff).length > 0) {
-        this.push_version(diff);
-        return Flakey.models.backend_controller.save(this.constructor.model_name, this.id, this.versions);
-      }
-    };
-
-    Model.prototype["delete"] = function() {
-      return Flakey.models.backend_controller["delete"](this.constructor.model_name, this.id);
-    };
-
-    return Model;
-
-  })();
-
-  BackendController = (function() {
-
-    function BackendController() {
-      this.delim = ":::";
-      this.backends = {
-        memory: {
-          log_key: 'flakey-memory-log',
-          pending_log: [],
-          interface: new MemoryBackend()
-        },
-        local: {
-          log_key: 'flakey-local-log',
-          pending_log: [],
-          interface: new LocalBackend()
-        }
-      };
-      this.read = Flakey.settings.read_backend || 'memory';
-      this.load_logs();
-    }
-
-    BackendController.prototype.all = function(name) {
-      return this.backends[this.read].interface.all(name);
-    };
-
-    BackendController.prototype.get = function(name, id) {
-      return this.backends[this.read].interface.get(name, id);
-    };
-
-    BackendController.prototype.find = function(name, query) {
-      return this.backends[this.read].interface.find(name, query);
-    };
-
-    BackendController.prototype.save = function(name, id, versions, backends) {
-      var backend, bname, log_msg;
-      if (backends == null) backends = this.backends;
-      for (bname in backends) {
-        if (!__hasProp.call(backends, bname)) continue;
-        backend = backends[bname];
-        log_msg = "save" + this.delim + JSON.stringify([name, id, versions]);
-        if (backend.pending_log.length) {
-          backend.pending_log.push(log_msg);
-          this.commit_logs();
-          this.exec_log({
-            bname: backend
-          });
-          return false;
-        }
-        if (!backend.interface.save(name, id, versions)) {
-          backend.pending_log.push(log_msg);
-          this.commit_logs();
-          return false;
-        }
-      }
-      return true;
-    };
-
-    BackendController.prototype["delete"] = function(name, id, backends) {
-      var backend, bname, log_msg;
-      if (backends == null) backends = this.backends;
-      for (bname in backends) {
-        if (!__hasProp.call(backends, bname)) continue;
-        backend = backends[bname];
-        log_msg = "delete" + this.delim + JSON.stringify([name, id]);
-        if (backend.pending_log.length) {
-          backend.pending_log.push(log_msg);
-          this.commit_logs();
-          this.exec_log({
-            name: backend
-          });
-          return false;
-        }
-        if (!backend.interface["delete"](name, id)) {
-          backend.pending_log.push(log_msg);
-          this.commit_logs();
-          return false;
-        }
-      }
-      return true;
-    };
-
-    BackendController.prototype.exec_log = function(backends) {
-      var action, backend, fn, msg, name, params, _results;
-      if (backends == null) backends = this.backends;
-      _results = [];
-      for (name in backends) {
-        if (!__hasProp.call(backends, name)) continue;
-        backend = backends[name];
-        _results.push((function() {
-          var _results2;
-          _results2 = [];
-          while (msg = backend.pending_log.shift()) {
-            action = this[msg.split(this.delim)];
-            fn = action[0];
-            params = JSON.parse(action[1]);
-            params.push({
-              name: backend
-            });
-            if (!action.apply(this, params)) {
-              backend.pending_log.unshift(msg);
-              break;
-            }
-            _results2.push(this.commit_logs());
-          }
-          return _results2;
-        }).call(this));
-      }
-      return _results;
-    };
-
-    BackendController.prototype.commit_logs = function(backends) {
-      var backend, name;
-      if (backends == null) backends = this.backends;
-      for (name in backends) {
-        if (!__hasProp.call(backends, name)) continue;
-        backend = backends[name];
-        localStorage[backend.log_key] = JSON.stringify(backend.pending_log);
-      }
-      return true;
-    };
-
-    BackendController.prototype.load_logs = function(backends) {
-      var backend, name;
-      if (backends == null) backends = this.backends;
-      for (name in backends) {
-        if (!__hasProp.call(backends, name)) continue;
-        backend = backends[name];
-        if (!(localStorage[backend.log_key] != null)) break;
-        backend.pending_log = JSON.parse(localStorage[backend.log_key]);
-      }
-      return true;
-    };
-
-    BackendController.prototype.sync = function(name, backends) {
-      var backend, bname, item, key, output, store, _i, _len, _ref, _ref2, _results;
-      if (backends == null) backends = this.backends;
-      store = {};
-      for (bname in backends) {
-        if (!__hasProp.call(backends, bname)) continue;
-        backend = backends[bname];
-        _ref = backend.interface.all(name);
-        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-          item = _ref[_i];
-          if (_ref2 = item.id, __indexOf.call(Object.keys(store), _ref2) >= 0) {
-            store[item.id].versions = this.merge_version_lists(item.versions, store[item.id].versions);
-          } else {
-            store[item.id] = item;
-          }
-        }
-      }
-      output = [];
-      for (key in store) {
-        if (!__hasProp.call(store, key)) continue;
-        item = store[key];
-        output.push(item);
-      }
-      _results = [];
-      for (bname in backends) {
-        if (!__hasProp.call(backends, bname)) continue;
-        backend = backends[bname];
-        _results.push(backend.interface._write(name, output));
-      }
-      return _results;
-    };
-
-    BackendController.prototype.merge_version_lists = function(a, b) {
-      var key, keys, output, rev, temp, value, _i, _j, _len, _len2, _ref, _ref2, _ref3;
-      temp = {};
-      _ref = a.concat(b);
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        rev = _ref[_i];
-        if (_ref2 = rev.time, __indexOf.call(Object.keys(temp), _ref2) >= 0) {
-          if (rev.id !== temp[rev.time].id) {
-            _ref3 = rev.fields;
-            for (key in _ref3) {
-              if (!__hasProp.call(_ref3, key)) continue;
-              value = _ref3[key];
-              temp[rev.time].fields[key] = value;
-            }
-          } else {
-            temp[rev.time] = rev;
-          }
-        } else {
-          temp[rev.time] = rev;
-        }
-      }
-      keys = Object.keys(temp);
-      keys.sort(function(a, b) {
-        return a - b;
-      });
-      output = [];
-      for (_j = 0, _len2 = keys.length; _j < _len2; _j++) {
-        key = keys[_j];
-        output.push(temp[key]);
-      }
-      return output;
-    };
-
-    return BackendController;
-
-  })();
-
-  Backend = (function() {
-
-    function Backend() {}
-
-    Backend.prototype.all = function(name) {
-      var store;
-      store = this._read(name);
-      if (!store) return [];
-      return store;
-    };
-
-    Backend.prototype.get = function(name, id) {
-      var index, store;
-      store = this._read(name);
-      index = this._query_by_id(name, id);
-      if (index === -1) return;
-      return store[index];
-    };
-
-    Backend.prototype.find = function(name, query) {
-      var i, iset, set, store, _i, _len;
-      store = this._read(name);
-      iset = this._query(name, query);
-      set = [];
-      for (_i = 0, _len = iset.length; _i < _len; _i++) {
-        i = iset[_i];
-        set.push(store[i]);
-      }
-      return set;
-    };
-
-    Backend.prototype.save = function(name, id, versions) {
-      var index, obj, store;
-      store = this._read(name);
-      if (!store) store = [];
-      index = this._query_by_id(name, id);
-      obj = {
-        id: id,
-        versions: versions
-      };
-      if (index === -1) {
-        store.push(obj);
-      } else {
-        store[index] = obj;
-      }
-      return this._write(name, store);
-    };
-
-    Backend.prototype["delete"] = function(name, id) {
-      var index, store;
-      store = this._read(name);
-      index = this._query_by_id(name, id);
-      if (index === -1) return true;
-      store.splice(index, 1);
-      return this._write(name, store);
-    };
-
-    Backend.prototype._query = function(name, query) {
-      var i, key, obj, rendered, set, store, value, _i, _len;
-      store = this._read(name);
-      if (!store) return [];
-      set = [];
-      i = 0;
-      for (_i = 0, _len = store.length; _i < _len; _i++) {
-        obj = store[_i];
-        rendered = this._render_obj(obj);
-        for (key in query) {
-          if (!__hasProp.call(query, key)) continue;
-          value = query[key];
-          if (rendered[key] === value) set.push(i);
-        }
-        i++;
-      }
-      return set;
-    };
-
-    Backend.prototype._query_by_id = function(name, id) {
-      var i, obj, store, _i, _len;
-      store = this._read(name);
-      if (!store) return -1;
-      i = 0;
-      for (_i = 0, _len = store.length; _i < _len; _i++) {
-        obj = store[_i];
-        if (obj.id === id) return i;
-        i++;
-      }
-      return -1;
-    };
-
-    Backend.prototype._render_obj = function(obj) {
-      var key, output, patches, rev, value, _i, _len, _ref, _ref2;
-      output = {};
-      _ref = obj.versions;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        rev = _ref[_i];
-        _ref2 = rev.fields;
-        for (key in _ref2) {
-          if (!__hasProp.call(_ref2, key)) continue;
-          value = _ref2[key];
-          if (value.constructor === "Patch") {
-            patches = Flakey.diff_patch.patch_fromText(value.patch_text);
-            output[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || "")[0];
-          } else {
-            output[key] = value;
-          }
-        }
-      }
-      return output;
-    };
-
-    return Backend;
-
-  })();
-
-  MemoryBackend = (function(_super) {
-
-    __extends(MemoryBackend, _super);
-
-    function MemoryBackend() {
-      if (!window.memcache) window.memcache = {};
-    }
-
-    MemoryBackend.prototype._read = function(name) {
-      return window.memcache[name];
-    };
-
-    MemoryBackend.prototype._write = function(name, store) {
-      window.memcache[name] = store;
-      return true;
-    };
-
-    return MemoryBackend;
-
-  })(Backend);
-
-  LocalBackend = (function(_super) {
-
-    __extends(LocalBackend, _super);
-
-    function LocalBackend() {
-      this.prefix = "flakey-";
-    }
-
-    LocalBackend.prototype._read = function(name) {
-      var store;
-      if (!localStorage[this.prefix + name]) {
-        localStorage[this.prefix + name] = JSON.stringify([]);
-      }
-      store = JSON.parse(localStorage[this.prefix + name]);
-      return store;
-    };
-
-    LocalBackend.prototype._write = function(name, store) {
-      localStorage[this.prefix + name] = JSON.stringify(store);
-      return true;
-    };
-
-    return LocalBackend;
-
-  })(Backend);
-
-  Flakey.models = {
-    Model: Model,
-    backend_controller: new BackendController()
-  };
-
-  Controller = (function() {
-
-    function Controller(config) {
-      var name, _i, _len, _ref;
-      if (config == null) config = {};
-      this.active = this.active || false;
-      this.actions = this.actions || {};
-      this.id = this.id || '';
-      this.class_name = this.class_name || '';
-      this.parent = this.parent || null;
-      this.container = this.container || null;
-      this.container_html = this.container_html || '';
-      this.subcontrollers = this.subcontrollers || [];
-      this.query_params = this.query_params || {};
-      this.container = $(document.createElement('div'));
-      this.container.html(this.container_html);
-      this.parent = config.parent || Flakey.settings.container;
-      this.parent.append(this.container);
-      this.container.attr('id', this.id);
-      _ref = this.class_name.split(' ');
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        name = _ref[_i];
-        this.container.addClass(name);
-      }
-    }
-
-    Controller.prototype.append = function() {
-      var Contr, contr, _i, _len, _results;
-      _results = [];
-      for (_i = 0, _len = arguments.length; _i < _len; _i++) {
-        Contr = arguments[_i];
-        contr = new Contr({
-          parent: this.parent
-        });
-        _results.push(this.subcontrollers.push(contr));
-      }
-      return _results;
-    };
-
-    Controller.prototype.render = function() {
-      return this.html('');
-    };
-
-    Controller.prototype.bind_actions = function() {
-      var action, fn, key, key_parts, selector, _ref, _results;
-      _ref = this.actions;
-      _results = [];
-      for (key in _ref) {
-        if (!__hasProp.call(_ref, key)) continue;
-        fn = _ref[key];
-        key_parts = key.split(' ');
-        action = key_parts.shift();
-        selector = key_parts.join(' ');
-        _results.push($(selector).bind(action, this[fn]));
-      }
-      return _results;
-    };
-
-    Controller.prototype.unbind_actions = function() {
-      var action, fn, key, key_parts, selector, _ref, _results;
-      _ref = this.actions;
-      _results = [];
-      for (key in _ref) {
-        if (!__hasProp.call(_ref, key)) continue;
-        fn = _ref[key];
-        key_parts = key.split(' ');
-        action = key_parts.shift();
-        selector = key_part.join(' ');
-        _results.push($(selector).unbind(action, this[fn]));
-      }
-      return _results;
-    };
-
-    Controller.prototype.html = function(htm) {
-      this.container_html = htm;
-      this.container.html(this.container_html);
-      return Flakey.events.trigger('html_updated');
-    };
-
-    Controller.prototype.make_active = function() {
-      var sub, _i, _len, _ref, _results;
-      this.active = true;
-      this.render();
-      this.bind_actions();
-      this.container.removeClass('passive').addClass('active');
-      _ref = this.subcontrollers;
-      _results = [];
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        sub = _ref[_i];
-        _results.push(sub.make_active());
-      }
-      return _results;
-    };
-
-    Controller.prototype.make_inactive = function() {
-      var sub, _i, _len, _ref, _results;
-      this.active = false;
-      this.unbind_actions();
-      this.container.removeClass('active').addClass('passive');
-      _ref = this.subcontrollers;
-      _results = [];
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        sub = _ref[_i];
-        _results.push(sub.make_inactive());
-      }
-      return _results;
-    };
-
-    Controller.prototype.set_queryparams = function(params) {
-      var sub, _i, _len, _ref, _results;
-      this.query_params = params;
-      _ref = this.subcontrollers;
-      _results = [];
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        sub = _ref[_i];
-        _results.push(sub.set_queryparams(params));
-      }
-      return _results;
-    };
-
-    return Controller;
-
-  })();
-
-  Stack = (function() {
-
-    function Stack(config) {
-      var contr, name, _i, _len, _ref, _ref2;
-      if (config == null) config = {};
-      this.resolve = __bind(this.resolve, this);
-      this.id = this.id || '';
-      this.class_name = this.class_name || '';
-      this.active = this.active || false;
-      this.controllers = this.controllers || {};
-      this.routes = this.routes || {};
-      this["default"] = this["default"] || '';
-      this.active_controller = this.active_controller || '';
-      this.parent = this.parent || null;
-      this.query_params = this.query_params || {};
-      this.container = $(document.createElement('div'));
-      this.container.attr('id', this.id);
-      _ref = this.class_name.split(' ');
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        name = _ref[_i];
-        this.container.addClass(name);
-      }
-      this.container.html(this.container_html);
-      this.parent = config.parent || Flakey.settings.container;
-      this.parent.append(this.container);
-      _ref2 = this.controllers;
-      for (name in _ref2) {
-        if (!__hasProp.call(_ref2, name)) continue;
-        contr = _ref2[name];
-        this.controllers[name] = new contr({
-          parent: this.container
-        });
-      }
-      window.addEventListener('hashchange', this.resolve, false);
-    }
-
-    Stack.prototype.resolve = function() {
-      var controller, controller_name, hash, location, name, new_controller, querystring, regex, route, _ref, _ref2;
-      hash = Flakey.util.get_hash();
-      new_controller = void 0;
-      if (hash.length > 0) {
-        if (hash.indexOf('?') !== -1) {
-          hash = hash.split('?');
-          location = hash[0];
-          querystring = hash[1];
-        } else {
-          location = hash;
-          querystring = "";
-        }
-        new_controller = void 0;
-        _ref = this.routes;
-        for (route in _ref) {
-          if (!__hasProp.call(_ref, route)) continue;
-          controller_name = _ref[route];
-          regex = new RegExp(route);
-          if (location.match(route)) new_controller = controller_name;
-        }
-      }
-      if (!new_controller) {
-        window.location.hash = "#" + this["default"];
-        return;
-      }
-      this.active_controller = new_controller;
-      this.controllers[this.active_controller].set_queryparams(Flakey.util.querystring.parse(querystring));
-      _ref2 = this.controllers;
-      for (name in _ref2) {
-        if (!__hasProp.call(_ref2, name)) continue;
-        controller = _ref2[name];
-        if (name !== this.active_controller) {
-          this.controllers[name].make_inactive();
-        }
-      }
-      if (this.active) {
-        this.controllers[this.active_controller].make_active();
-        this.controllers[this.active_controller].render();
-      }
-      return this.controllers[this.active_controller];
-    };
-
-    Stack.prototype.make_active = function() {
-      this.resolve();
-      if (this.controllers[this.active_controller] !== void 0) {
-        this.controllers[this.active_controller].make_active();
-        this.controllers[this.active_controller].render();
-      }
-      return this.active = true;
-    };
-
-    Stack.prototype.make_inactive = function() {
-      if (this.controllers[this.active_controller] !== void 0) {
-        this.controllers[this.active_controller].make_inactive();
-      }
-      return this.active = false;
-    };
-
-    Stack.prototype.set_queryparams = function(params) {
-      return this.query_params = params;
-    };
-
-    return Stack;
-
-  })();
-
-  Flakey.controllers = {
-    Stack: Stack,
-    Controller: Controller
-  };
-
-  Template = (function() {
-
-    function Template(eco, name) {
-      this.eco = eco;
-      this.name = name;
-    }
-
-    Template.prototype.render = function(context) {
-      if (context == null) context = {};
-      return this.eco(context);
-    };
-
-    return Template;
-
-  })();
-
-  get_template = function(name, tobj) {
-    var template;
-    template = tobj.ecoTemplates[name];
-    return new Template(template, name);
-  };
-
-  Flakey.templates = {
-    get_template: get_template,
-    Template: Template
-  };
-
-  module.exports = Flakey;
-
-}).call(this);
-
-});
-
-require.define("/node_modules/jqueryify/package.json", function (require, module, exports, __dirname, __filename) {
-    module.exports = {"main":"./index.js"}
-});
-
-require.define("/node_modules/jqueryify/index.js", function (require, module, exports, __dirname, __filename) {
-    /*!
+  /*!
  * jQuery JavaScript Library v1.7.1
  * http://jquery.com/
  *
@@ -5267,7 +4350,7 @@ jQuery.extend({
 		// Browsers that fail expando deletion also refuse to delete expandos on
 		// the window, but it will allow it on all other JS objects; other browsers
 		// don't care
-		// Ensure that `cache` is not a window object #10080
+		// Ensure that 'cache' is not a window object #10080
 		if ( jQuery.support.deleteExpando || !cache.setInterval ) {
 			delete cache[ id ];
 		} else {
@@ -12711,403 +11794,340 @@ if ( typeof define === "function" && define.amd && define.amd.jQuery ) {
 
 
 
-})( window );
+})( window );;
+  /*
+    http://www.JSON.org/json2.js
+    2011-10-19
 
-module.exports = jQuery;
-});
+    Public Domain.
 
-require.define("/node_modules/jsonify/package.json", function (require, module, exports, __dirname, __filename) {
-    module.exports = {"main":"index.js"}
-});
+    NO WARRANTY EXPRESSED OR IMPLIED. USE AT YOUR OWN RISK.
 
-require.define("/node_modules/jsonify/index.js", function (require, module, exports, __dirname, __filename) {
-    exports.parse = require('./lib/parse');
-exports.stringify = require('./lib/stringify');
+    See http://www.JSON.org/js.html
 
-});
 
-require.define("/node_modules/jsonify/lib/parse.js", function (require, module, exports, __dirname, __filename) {
-    var at, // The index of the current character
-    ch, // The current character
-    escapee = {
-        '"':  '"',
-        '\\': '\\',
-        '/':  '/',
-        b:    '\b',
-        f:    '\f',
-        n:    '\n',
-        r:    '\r',
-        t:    '\t'
-    },
-    text,
+    This code should be minified before deployment.
+    See http://javascript.crockford.com/jsmin.html
 
-    error = function (m) {
-        // Call error when something is wrong.
-        throw {
-            name:    'SyntaxError',
-            message: m,
-            at:      at,
-            text:    text
-        };
-    },
-    
-    next = function (c) {
-        // If a c parameter is provided, verify that it matches the current character.
-        if (c && c !== ch) {
-            error("Expected '" + c + "' instead of '" + ch + "'");
-        }
-        
-        // Get the next character. When there are no more characters,
-        // return the empty string.
-        
-        ch = text.charAt(at);
-        at += 1;
-        return ch;
-    },
-    
-    number = function () {
-        // Parse a number value.
-        var number,
-            string = '';
-        
-        if (ch === '-') {
-            string = '-';
-            next('-');
-        }
-        while (ch >= '0' && ch <= '9') {
-            string += ch;
-            next();
-        }
-        if (ch === '.') {
-            string += '.';
-            while (next() && ch >= '0' && ch <= '9') {
-                string += ch;
-            }
-        }
-        if (ch === 'e' || ch === 'E') {
-            string += ch;
-            next();
-            if (ch === '-' || ch === '+') {
-                string += ch;
-                next();
-            }
-            while (ch >= '0' && ch <= '9') {
-                string += ch;
-                next();
-            }
-        }
-        number = +string;
-        if (!isFinite(number)) {
-            error("Bad number");
-        } else {
-            return number;
-        }
-    },
-    
-    string = function () {
-        // Parse a string value.
-        var hex,
-            i,
-            string = '',
-            uffff;
-        
-        // When parsing for string values, we must look for " and \ characters.
-        if (ch === '"') {
-            while (next()) {
-                if (ch === '"') {
-                    next();
-                    return string;
-                } else if (ch === '\\') {
-                    next();
-                    if (ch === 'u') {
-                        uffff = 0;
-                        for (i = 0; i < 4; i += 1) {
-                            hex = parseInt(next(), 16);
-                            if (!isFinite(hex)) {
-                                break;
-                            }
-                            uffff = uffff * 16 + hex;
-                        }
-                        string += String.fromCharCode(uffff);
-                    } else if (typeof escapee[ch] === 'string') {
-                        string += escapee[ch];
-                    } else {
-                        break;
+    USE YOUR OWN COPY. IT IS EXTREMELY UNWISE TO LOAD CODE FROM SERVERS YOU DO
+    NOT CONTROL.
+
+
+    This file creates a global JSON object containing two methods: stringify
+    and parse.
+
+        JSON.stringify(value, replacer, space)
+            value       any JavaScript value, usually an object or array.
+
+            replacer    an optional parameter that determines how object
+                        values are stringified for objects. It can be a
+                        function or an array of strings.
+
+            space       an optional parameter that specifies the indentation
+                        of nested structures. If it is omitted, the text will
+                        be packed without extra whitespace. If it is a number,
+                        it will specify the number of spaces to indent at each
+                        level. If it is a string (such as '\t' or '&nbsp;'),
+                        it contains the characters used to indent at each level.
+
+            This method produces a JSON text from a JavaScript value.
+
+            When an object value is found, if the object contains a toJSON
+            method, its toJSON method will be called and the result will be
+            stringified. A toJSON method does not serialize: it returns the
+            value represented by the name/value pair that should be serialized,
+            or undefined if nothing should be serialized. The toJSON method
+            will be passed the key associated with the value, and this will be
+            bound to the value
+
+            For example, this would serialize Dates as ISO strings.
+
+                Date.prototype.toJSON = function (key) {
+                    function f(n) {
+                        // Format integers to have at least two digits.
+                        return n < 10 ? '0' + n : n;
                     }
-                } else {
-                    string += ch;
-                }
-            }
-        }
-        error("Bad string");
-    },
 
-    white = function () {
+                    return this.getUTCFullYear()   + '-' +
+                         f(this.getUTCMonth() + 1) + '-' +
+                         f(this.getUTCDate())      + 'T' +
+                         f(this.getUTCHours())     + ':' +
+                         f(this.getUTCMinutes())   + ':' +
+                         f(this.getUTCSeconds())   + 'Z';
+                };
 
-// Skip whitespace.
+            You can provide an optional replacer method. It will be passed the
+            key and value of each member, with this bound to the containing
+            object. The value that is returned from your method will be
+            serialized. If your method returns undefined, then the member will
+            be excluded from the serialization.
 
-        while (ch && ch <= ' ') {
-            next();
-        }
-    },
+            If the replacer parameter is an array of strings, then it will be
+            used to select the members to be serialized. It filters the results
+            such that only members with keys listed in the replacer array are
+            stringified.
 
-    word = function () {
+            Values that do not have JSON representations, such as undefined or
+            functions, will not be serialized. Such values in objects will be
+            dropped; in arrays they will be replaced with null. You can use
+            a replacer function to replace those with JSON values.
+            JSON.stringify(undefined) returns undefined.
 
-// true, false, or null.
+            The optional space parameter produces a stringification of the
+            value that is filled with line breaks and indentation to make it
+            easier to read.
 
-        switch (ch) {
-        case 't':
-            next('t');
-            next('r');
-            next('u');
-            next('e');
-            return true;
-        case 'f':
-            next('f');
-            next('a');
-            next('l');
-            next('s');
-            next('e');
-            return false;
-        case 'n':
-            next('n');
-            next('u');
-            next('l');
-            next('l');
-            return null;
-        }
-        error("Unexpected '" + ch + "'");
-    },
+            If the space parameter is a non-empty string, then that string will
+            be used for indentation. If the space parameter is a number, then
+            the indentation will be that many spaces.
 
-    value,  // Place holder for the value function.
+            Example:
 
-    array = function () {
+            text = JSON.stringify(['e', {pluribus: 'unum'}]);
+            // text is '["e",{"pluribus":"unum"}]'
 
-// Parse an array value.
 
-        var array = [];
+            text = JSON.stringify(['e', {pluribus: 'unum'}], null, '\t');
+            // text is '[\n\t"e",\n\t{\n\t\t"pluribus": "unum"\n\t}\n]'
 
-        if (ch === '[') {
-            next('[');
-            white();
-            if (ch === ']') {
-                next(']');
-                return array;   // empty array
-            }
-            while (ch) {
-                array.push(value());
-                white();
-                if (ch === ']') {
-                    next(']');
-                    return array;
-                }
-                next(',');
-                white();
-            }
-        }
-        error("Bad array");
-    },
+            text = JSON.stringify([new Date()], function (key, value) {
+                return this[key] instanceof Date ?
+                    'Date(' + this[key] + ')' : value;
+            });
+            // text is '["Date(---current time---)"]'
 
-    object = function () {
 
-// Parse an object value.
+        JSON.parse(text, reviver)
+            This method parses a JSON text to produce an object or array.
+            It can throw a SyntaxError exception.
 
-        var key,
-            object = {};
+            The optional reviver parameter is a function that can filter and
+            transform the results. It receives each of the keys and values,
+            and its return value is used instead of the original value.
+            If it returns what it received, then the structure is not modified.
+            If it returns undefined then the member is deleted.
 
-        if (ch === '{') {
-            next('{');
-            white();
-            if (ch === '}') {
-                next('}');
-                return object;   // empty object
-            }
-            while (ch) {
-                key = string();
-                white();
-                next(':');
-                if (Object.hasOwnProperty.call(object, key)) {
-                    error('Duplicate key "' + key + '"');
-                }
-                object[key] = value();
-                white();
-                if (ch === '}') {
-                    next('}');
-                    return object;
-                }
-                next(',');
-                white();
-            }
-        }
-        error("Bad object");
-    };
+            Example:
 
-value = function () {
+            // Parse the text. Values that look like ISO date strings will
+            // be converted to Date objects.
 
-// Parse a JSON value. It could be an object, an array, a string, a number,
-// or a word.
-
-    white();
-    switch (ch) {
-    case '{':
-        return object();
-    case '[':
-        return array();
-    case '"':
-        return string();
-    case '-':
-        return number();
-    default:
-        return ch >= '0' && ch <= '9' ? number() : word();
-    }
-};
-
-// Return the json_parse function. It will have access to all of the above
-// functions and variables.
-
-module.exports = function (source, reviver) {
-    var result;
-    
-    text = source;
-    at = 0;
-    ch = ' ';
-    result = value();
-    white();
-    if (ch) {
-        error("Syntax error");
-    }
-
-    // If there is a reviver function, we recursively walk the new structure,
-    // passing each name/value pair to the reviver function for possible
-    // transformation, starting with a temporary root object that holds the result
-    // in an empty key. If there is not a reviver function, we simply return the
-    // result.
-
-    return typeof reviver === 'function' ? (function walk(holder, key) {
-        var k, v, value = holder[key];
-        if (value && typeof value === 'object') {
-            for (k in value) {
-                if (Object.prototype.hasOwnProperty.call(value, k)) {
-                    v = walk(value, k);
-                    if (v !== undefined) {
-                        value[k] = v;
-                    } else {
-                        delete value[k];
+            myData = JSON.parse(text, function (key, value) {
+                var a;
+                if (typeof value === 'string') {
+                    a =
+/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2}(?:\.\d*)?)Z$/.exec(value);
+                    if (a) {
+                        return new Date(Date.UTC(+a[1], +a[2] - 1, +a[3], +a[4],
+                            +a[5], +a[6]));
                     }
                 }
-            }
-        }
-        return reviver.call(holder, key, value);
-    }({'': result}, '')) : result;
-};
+                return value;
+            });
 
-});
+            myData = JSON.parse('["Date(09/09/2001)"]', function (key, value) {
+                var d;
+                if (typeof value === 'string' &&
+                        value.slice(0, 5) === 'Date(' &&
+                        value.slice(-1) === ')') {
+                    d = new Date(value.slice(5, -1));
+                    if (d) {
+                        return d;
+                    }
+                }
+                return value;
+            });
 
-require.define("/node_modules/jsonify/lib/stringify.js", function (require, module, exports, __dirname, __filename) {
-    var cx = /[\u0000\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g,
-    escapable = /[\\\"\x00-\x1f\x7f-\x9f\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g,
-    gap,
-    indent,
-    meta = {    // table of character substitutions
-        '\b': '\\b',
-        '\t': '\\t',
-        '\n': '\\n',
-        '\f': '\\f',
-        '\r': '\\r',
-        '"' : '\\"',
-        '\\': '\\\\'
-    },
-    rep;
 
-function quote(string) {
-    // If the string contains no control characters, no quote characters, and no
-    // backslash characters, then we can safely slap some quotes around it.
-    // Otherwise we must also replace the offending characters with safe escape
-    // sequences.
-    
-    escapable.lastIndex = 0;
-    return escapable.test(string) ? '"' + string.replace(escapable, function (a) {
-        var c = meta[a];
-        return typeof c === 'string' ? c :
-            '\\u' + ('0000' + a.charCodeAt(0).toString(16)).slice(-4);
-    }) + '"' : '"' + string + '"';
+    This is a reference implementation. You are free to copy, modify, or
+    redistribute.
+*/
+
+/*jslint evil: true, regexp: true */
+
+/*members "", "\b", "\t", "\n", "\f", "\r", "\"", JSON, "\\", apply,
+    call, charCodeAt, getUTCDate, getUTCFullYear, getUTCHours,
+    getUTCMinutes, getUTCMonth, getUTCSeconds, hasOwnProperty, join,
+    lastIndex, length, parse, prototype, push, replace, slice, stringify,
+    test, toJSON, toString, valueOf
+*/
+
+
+// Create a JSON object only if one does not already exist. We create the
+// methods in a closure to avoid creating global variables.
+
+var JSON;
+if (!JSON) {
+    JSON = {};
 }
 
-function str(key, holder) {
-    // Produce a string from holder[key].
-    var i,          // The loop counter.
-        k,          // The member key.
-        v,          // The member value.
-        length,
-        mind = gap,
-        partial,
-        value = holder[key];
-    
-    // If the value has a toJSON method, call it to obtain a replacement value.
-    if (value && typeof value === 'object' &&
-            typeof value.toJSON === 'function') {
-        value = value.toJSON(key);
+(function () {
+    'use strict';
+
+    function f(n) {
+        // Format integers to have at least two digits.
+        return n < 10 ? '0' + n : n;
     }
-    
-    // If we were called with a replacer function, then call the replacer to
-    // obtain a replacement value.
-    if (typeof rep === 'function') {
-        value = rep.call(holder, key, value);
+
+    if (typeof Date.prototype.toJSON !== 'function') {
+
+        Date.prototype.toJSON = function (key) {
+
+            return isFinite(this.valueOf())
+                ? this.getUTCFullYear()     + '-' +
+                    f(this.getUTCMonth() + 1) + '-' +
+                    f(this.getUTCDate())      + 'T' +
+                    f(this.getUTCHours())     + ':' +
+                    f(this.getUTCMinutes())   + ':' +
+                    f(this.getUTCSeconds())   + 'Z'
+                : null;
+        };
+
+        String.prototype.toJSON      =
+            Number.prototype.toJSON  =
+            Boolean.prototype.toJSON = function (key) {
+                return this.valueOf();
+            };
     }
-    
-    // What happens next depends on the value's type.
-    switch (typeof value) {
+
+    var cx = /[\u0000\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g,
+        escapable = /[\\\"\x00-\x1f\x7f-\x9f\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g,
+        gap,
+        indent,
+        meta = {    // table of character substitutions
+            '\b': '\\b',
+            '\t': '\\t',
+            '\n': '\\n',
+            '\f': '\\f',
+            '\r': '\\r',
+            '"' : '\\"',
+            '\\': '\\\\'
+        },
+        rep;
+
+
+    function quote(string) {
+
+// If the string contains no control characters, no quote characters, and no
+// backslash characters, then we can safely slap some quotes around it.
+// Otherwise we must also replace the offending characters with safe escape
+// sequences.
+
+        escapable.lastIndex = 0;
+        return escapable.test(string) ? '"' + string.replace(escapable, function (a) {
+            var c = meta[a];
+            return typeof c === 'string'
+                ? c
+                : '\\u' + ('0000' + a.charCodeAt(0).toString(16)).slice(-4);
+        }) + '"' : '"' + string + '"';
+    }
+
+
+    function str(key, holder) {
+
+// Produce a string from holder[key].
+
+        var i,          // The loop counter.
+            k,          // The member key.
+            v,          // The member value.
+            length,
+            mind = gap,
+            partial,
+            value = holder[key];
+
+// If the value has a toJSON method, call it to obtain a replacement value.
+
+        if (value && typeof value === 'object' &&
+                typeof value.toJSON === 'function') {
+            value = value.toJSON(key);
+        }
+
+// If we were called with a replacer function, then call the replacer to
+// obtain a replacement value.
+
+        if (typeof rep === 'function') {
+            value = rep.call(holder, key, value);
+        }
+
+// What happens next depends on the value's type.
+
+        switch (typeof value) {
         case 'string':
             return quote(value);
-        
+
         case 'number':
-            // JSON numbers must be finite. Encode non-finite numbers as null.
+
+// JSON numbers must be finite. Encode non-finite numbers as null.
+
             return isFinite(value) ? String(value) : 'null';
-        
+
         case 'boolean':
         case 'null':
-            // If the value is a boolean or null, convert it to a string. Note:
-            // typeof null does not produce 'null'. The case is included here in
-            // the remote chance that this gets fixed someday.
+
+// If the value is a boolean or null, convert it to a string. Note:
+// typeof null does not produce 'null'. The case is included here in
+// the remote chance that this gets fixed someday.
+
             return String(value);
-            
+
+// If the type is 'object', we might be dealing with an object or an array or
+// null.
+
         case 'object':
-            if (!value) return 'null';
+
+// Due to a specification blunder in ECMAScript, typeof null is 'object',
+// so watch out for that case.
+
+            if (!value) {
+                return 'null';
+            }
+
+// Make an array to hold the partial results of stringifying this object value.
+
             gap += indent;
             partial = [];
-            
-            // Array.isArray
+
+// Is the value an array?
+
             if (Object.prototype.toString.apply(value) === '[object Array]') {
+
+// The value is an array. Stringify every element. Use null as a placeholder
+// for non-JSON values.
+
                 length = value.length;
                 for (i = 0; i < length; i += 1) {
                     partial[i] = str(i, value) || 'null';
                 }
-                
-                // Join all of the elements together, separated with commas, and
-                // wrap them in brackets.
-                v = partial.length === 0 ? '[]' : gap ?
-                    '[\n' + gap + partial.join(',\n' + gap) + '\n' + mind + ']' :
-                    '[' + partial.join(',') + ']';
+
+// Join all of the elements together, separated with commas, and wrap them in
+// brackets.
+
+                v = partial.length === 0
+                    ? '[]'
+                    : gap
+                    ? '[\n' + gap + partial.join(',\n' + gap) + '\n' + mind + ']'
+                    : '[' + partial.join(',') + ']';
                 gap = mind;
                 return v;
             }
-            
-            // If the replacer is an array, use it to select the members to be
-            // stringified.
+
+// If the replacer is an array, use it to select the members to be stringified.
+
             if (rep && typeof rep === 'object') {
                 length = rep.length;
                 for (i = 0; i < length; i += 1) {
-                    k = rep[i];
-                    if (typeof k === 'string') {
+                    if (typeof rep[i] === 'string') {
+                        k = rep[i];
                         v = str(k, value);
                         if (v) {
                             partial.push(quote(k) + (gap ? ': ' : ':') + v);
                         }
                     }
                 }
-            }
-            else {
-                // Otherwise, iterate through all of the keys in the object.
+            } else {
+
+// Otherwise, iterate through all of the keys in the object.
+
                 for (k in value) {
                     if (Object.prototype.hasOwnProperty.call(value, k)) {
                         v = str(k, value);
@@ -13117,47 +12137,1189 @@ function str(key, holder) {
                     }
                 }
             }
-            
-        // Join all of the member texts together, separated with commas,
-        // and wrap them in braces.
 
-        v = partial.length === 0 ? '{}' : gap ?
-            '{\n' + gap + partial.join(',\n' + gap) + '\n' + mind + '}' :
-            '{' + partial.join(',') + '}';
-        gap = mind;
-        return v;
-    }
-}
+// Join all of the member texts together, separated with commas,
+// and wrap them in braces.
 
-module.exports = function (value, replacer, space) {
-    var i;
-    gap = '';
-    indent = '';
-    
-    // If the space parameter is a number, make an indent string containing that
-    // many spaces.
-    if (typeof space === 'number') {
-        for (i = 0; i < space; i += 1) {
-            indent += ' ';
+            v = partial.length === 0
+                ? '{}'
+                : gap
+                ? '{\n' + gap + partial.join(',\n' + gap) + '\n' + mind + '}'
+                : '{' + partial.join(',') + '}';
+            gap = mind;
+            return v;
         }
     }
-    // If the space parameter is a string, it will be used as the indent string.
-    else if (typeof space === 'string') {
-        indent = space;
+
+// If the JSON object does not yet have a stringify method, give it one.
+
+    if (typeof JSON.stringify !== 'function') {
+        JSON.stringify = function (value, replacer, space) {
+
+// The stringify method takes a value and an optional replacer, and an optional
+// space parameter, and returns a JSON text. The replacer can be a function
+// that can replace values, or an array of strings that will select the keys.
+// A default replacer method can be provided. Use of the space parameter can
+// produce text that is more easily readable.
+
+            var i;
+            gap = '';
+            indent = '';
+
+// If the space parameter is a number, make an indent string containing that
+// many spaces.
+
+            if (typeof space === 'number') {
+                for (i = 0; i < space; i += 1) {
+                    indent += ' ';
+                }
+
+// If the space parameter is a string, it will be used as the indent string.
+
+            } else if (typeof space === 'string') {
+                indent = space;
+            }
+
+// If there is a replacer, it must be a function or an array.
+// Otherwise, throw an error.
+
+            rep = replacer;
+            if (replacer && typeof replacer !== 'function' &&
+                    (typeof replacer !== 'object' ||
+                    typeof replacer.length !== 'number')) {
+                throw new Error('JSON.stringify');
+            }
+
+// Make a fake root object containing our value under the key of ''.
+// Return the result of stringifying the value.
+
+            return str('', {'': value});
+        };
     }
 
-    // If there is a replacer, it must be a function or an array.
-    // Otherwise, throw an error.
-    rep = replacer;
-    if (replacer && typeof replacer !== 'function'
-    && (typeof replacer !== 'object' || typeof replacer.length !== 'number')) {
-        throw new Error('JSON.stringify');
+
+// If the JSON object does not yet have a parse method, give it one.
+
+    if (typeof JSON.parse !== 'function') {
+        JSON.parse = function (text, reviver) {
+
+// The parse method takes a text and an optional reviver function, and returns
+// a JavaScript value if the text is a valid JSON text.
+
+            var j;
+
+            function walk(holder, key) {
+
+// The walk method is used to recursively walk the resulting structure so
+// that modifications can be made.
+
+                var k, v, value = holder[key];
+                if (value && typeof value === 'object') {
+                    for (k in value) {
+                        if (Object.prototype.hasOwnProperty.call(value, k)) {
+                            v = walk(value, k);
+                            if (v !== undefined) {
+                                value[k] = v;
+                            } else {
+                                delete value[k];
+                            }
+                        }
+                    }
+                }
+                return reviver.call(holder, key, value);
+            }
+
+
+// Parsing happens in four stages. In the first stage, we replace certain
+// Unicode characters with escape sequences. JavaScript handles many characters
+// incorrectly, either silently deleting them, or treating them as line endings.
+
+            text = String(text);
+            cx.lastIndex = 0;
+            if (cx.test(text)) {
+                text = text.replace(cx, function (a) {
+                    return '\\u' +
+                        ('0000' + a.charCodeAt(0).toString(16)).slice(-4);
+                });
+            }
+
+// In the second stage, we run the text against regular expressions that look
+// for non-JSON patterns. We are especially concerned with '()' and 'new'
+// because they can cause invocation, and '=' because it can cause mutation.
+// But just to be safe, we want to reject all unexpected forms.
+
+// We split the second stage into 4 regexp operations in order to work around
+// crippling inefficiencies in IE's and Safari's regexp engines. First we
+// replace the JSON backslash pairs with '@' (a non-JSON character). Second, we
+// replace all simple value tokens with ']' characters. Third, we delete all
+// open brackets that follow a colon or comma or that begin the text. Finally,
+// we look to see that the remaining characters are only whitespace or ']' or
+// ',' or ':' or '{' or '}'. If that is so, then the text is safe for eval.
+
+            if (/^[\],:{}\s]*$/
+                    .test(text.replace(/\\(?:["\\\/bfnrt]|u[0-9a-fA-F]{4})/g, '@')
+                        .replace(/"[^"\\\n\r]*"|true|false|null|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?/g, ']')
+                        .replace(/(?:^|:|,)(?:\s*\[)+/g, ''))) {
+
+// In the third stage we use the eval function to compile the text into a
+// JavaScript structure. The '{' operator is subject to a syntactic ambiguity
+// in JavaScript: it can begin a block or an object literal. We wrap the text
+// in parens to eliminate the ambiguity.
+
+                j = eval('(' + text + ')');
+
+// In the optional fourth stage, we recursively walk the new structure, passing
+// each name/value pair to a reviver function for possible transformation.
+
+                return typeof reviver === 'function'
+                    ? walk({'': j}, '')
+                    : j;
+            }
+
+// If the text is not JSON parseable, then a SyntaxError is thrown.
+
+            throw new SyntaxError('JSON.parse');
+        };
     }
-    
-    // Make a fake root object containing our value under the key of ''.
-    // Return the result of stringifying the value.
-    return str('', {'': value});
-};
+}());;
+  var $, Backend, BackendController, Controller, Events, Flakey, JSON, LocalBackend, MemoryBackend, Model, ServerBackend, Stack, Template, get_template,
+    __hasProp = Object.prototype.hasOwnProperty,
+    __indexOf = Array.prototype.indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; },
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; },
+    __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
+
+  Flakey = {
+    diff_patch: new diff_match_patch(),
+    settings: {
+      diff_text: true,
+      container: void 0,
+      read_backend: 'memory',
+      base_model_endpoint: null
+    },
+    status: {
+      server_online: void 0
+    }
+  };
+
+  jQuery.noConflict();
+
+  $ = Flakey.$ = jQuery;
+
+  JSON = Flakey.JSON = JSON;
+
+  Flakey.init = function(config) {
+    var key, value, _results;
+    _results = [];
+    for (key in config) {
+      if (!__hasProp.call(config, key)) continue;
+      value = config[key];
+      _results.push(Flakey.settings[key] = value);
+    }
+    return _results;
+  };
+
+  if (window) window.Flakey = Flakey;
+
+  Flakey.util = {
+    guid: function() {
+      var guid;
+      guid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx';
+      guid = guid.replace(/[xy]/g, function(c) {
+        var r, v;
+        r = Math.random() * 16 | 0;
+        if (c === 'x') {
+          v = r;
+        } else {
+          v = r & 3 | 8;
+        }
+        v.toString(16).toUpperCase();
+        return v;
+      });
+      return guid;
+    },
+    get_hash: function() {
+      var hash;
+      hash = window.location.hash;
+      if (hash.indexOf('#') === 0) hash = hash.slice(1);
+      return hash;
+    },
+    querystring: {
+      parse: function(str) {
+        var key, pair, pairs, params, value, _i, _len;
+        if (!str || str.constructor !== String) return {};
+        pairs = str.split('&');
+        params = {};
+        for (_i = 0, _len = pairs.length; _i < _len; _i++) {
+          pair = pairs[_i];
+          pair = pair.split('=');
+          key = decodeURIComponent(pair[0]);
+          value = decodeURIComponent(pair[1]);
+          params[key] = value;
+        }
+        return params;
+      },
+      build: function(params) {
+        var key, pairs, value;
+        if (!params || params.constructor !== Object) return '';
+        pairs = [];
+        for (key in params) {
+          if (!__hasProp.call(params, key)) continue;
+          value = params[key];
+          pairs.push("" + (encodeURIComponent(key)) + "=" + (encodeURIComponent(value)));
+        }
+        return pairs.join('&');
+      },
+      update: function(params, merge) {
+        var hash, location, query;
+        if (merge == null) merge = false;
+        hash = Flakey.util.get_hash();
+        if (hash.indexOf('?')) {
+          hash = hash.split('?');
+          location = hash[0];
+          query = Flakey.util.querystring.parse(hash[1]);
+        } else {
+          location = hash;
+          query = {};
+        }
+        if (merge) {
+          $.extend(query, params);
+        } else {
+          query = params;
+        }
+        return window.location.hash = "" + location + "?" + (Flakey.util.querystring.build(query));
+      }
+    }
+  };
+
+  Events = (function() {
+
+    function Events() {}
+
+    Events.prototype.events = {};
+
+    Events.prototype.register = function(event, fn, namespace) {
+      if (namespace == null) namespace = 'flakey';
+      if (this.events[namespace] === void 0) this.events[namespace] = {};
+      if (this.events[namespace][event] === void 0) {
+        this.events[namespace][event] = [];
+      }
+      this.events[namespace][event].push(fn);
+      return this.events[namespace][event];
+    };
+
+    Events.prototype.trigger = function(event, namespace) {
+      var fn, output, _i, _len, _ref;
+      if (namespace == null) namespace = 'flakey';
+      if (this.events[namespace] === void 0) this.events[namespace] = {};
+      if (this.events[namespace][event] === void 0) return;
+      output = [];
+      _ref = this.events[namespace][event];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        fn = _ref[_i];
+        output.push(fn());
+      }
+      return output;
+    };
+
+    Events.prototype.clear = function(namespace) {
+      if (namespace == null) namespace = 'flakey';
+      return this.events[namespace] = {};
+    };
+
+    return Events;
+
+  })();
+
+  Flakey.events = new Events();
+
+  Model = (function() {
+
+    Model.model_name = null;
+
+    Model.fields = ['id'];
+
+    Model.objects = {
+      constructor: Model,
+      get: function(id) {
+        var m, obj;
+        obj = Flakey.models.backend_controller.get(this.constructor.model_name, id);
+        if (!obj) return;
+        m = new this.constructor();
+        m["import"](obj);
+        return m;
+      },
+      all: function() {
+        var m, obj, set, _i, _len, _ref;
+        set = [];
+        _ref = Flakey.models.backend_controller.all(this.constructor.model_name);
+        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+          obj = _ref[_i];
+          m = new this.constructor();
+          m["import"](obj);
+          set.push(m);
+        }
+        return set;
+      }
+    };
+
+    function Model() {
+      this.id = Flakey.util.guid();
+      this.versions = [];
+    }
+
+    Model.prototype.diff = function(new_obj, old_obj) {
+      var key, patches, save, _i, _len, _ref;
+      save = {};
+      _ref = Object.keys(new_obj);
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        key = _ref[_i];
+        if (new_obj[key] !== old_obj[key]) {
+          if (new_obj[key].constructor === String) {
+            old_obj[key] = old_obj[key] != null ? old_obj[key].toString() : '';
+          }
+          if (new_obj[key].constructor === String && old_obj[key].constructor === String && Flakey.settings.diff_text) {
+            patches = Flakey.diff_patch.patch_make(old_obj[key], new_obj[key]);
+            save[key] = {
+              constructor: 'Patch',
+              patch_text: Flakey.diff_patch.patch_toText(patches)
+            };
+          } else {
+            save[key] = new_obj[key];
+          }
+        }
+      }
+      return save;
+    };
+
+    Model.prototype["export"] = function() {
+      var field, obj, _i, _len, _ref;
+      obj = {};
+      _ref = this.constructor.fields;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        field = _ref[_i];
+        obj[field] = this[field];
+      }
+      return obj;
+    };
+
+    Model.prototype.evolve = function(version_id) {
+      var key, obj, patches, rev, value, _i, _len, _ref, _ref2;
+      obj = {};
+      _ref = this.versions;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        rev = _ref[_i];
+        _ref2 = rev.fields;
+        for (key in _ref2) {
+          if (!__hasProp.call(_ref2, key)) continue;
+          value = _ref2[key];
+          if (value.constructor === 'Patch') {
+            patches = Flakey.diff_patch.patch_fromText(value.patch_text);
+            obj[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0];
+          } else {
+            obj[key] = value;
+          }
+        }
+        if (version_id !== void 0 && version_id === rev.version_id) return obj;
+      }
+      return obj;
+    };
+
+    Model.prototype["import"] = function(obj) {
+      var key, value, _ref, _results;
+      this.versions = obj.versions;
+      this.id = obj.id;
+      _ref = this.evolve();
+      _results = [];
+      for (key in _ref) {
+        if (!__hasProp.call(_ref, key)) continue;
+        value = _ref[key];
+        _results.push(this[key] = value);
+      }
+      return _results;
+    };
+
+    Model.prototype.push_version = function(diff) {
+      var version_id;
+      version_id = Flakey.util.guid();
+      return this.versions.push({
+        version_id: version_id,
+        time: +(new Date()),
+        fields: diff
+      });
+    };
+
+    Model.prototype.save = function() {
+      var diff, new_obj, old_obj;
+      new_obj = this["export"]();
+      old_obj = this.evolve();
+      diff = this.diff(new_obj, old_obj);
+      if (Object.keys(diff).length > 0) {
+        this.push_version(diff);
+        return Flakey.models.backend_controller.save(this.constructor.model_name, this.id, this.versions);
+      }
+    };
+
+    Model.prototype["delete"] = function() {
+      return Flakey.models.backend_controller["delete"](this.constructor.model_name, this.id);
+    };
+
+    return Model;
+
+  })();
+
+  BackendController = (function() {
+
+    function BackendController() {
+      this.delim = ':::';
+      this.backends = {
+        memory: {
+          log_key: 'flakey-memory-log',
+          pending_log: [],
+          interface: new MemoryBackend()
+        },
+        local: {
+          log_key: 'flakey-local-log',
+          pending_log: [],
+          interface: new LocalBackend()
+        }
+      };
+      if (Flakey.settings.base_model_endpoint) {
+        this.backends['server'] = {
+          log_key: 'flakey-server-log',
+          pending_log: [],
+          interface: new ServerBackend()
+        };
+      }
+      this.read = Flakey.settings.read_backend || 'memory';
+      this.load_logs();
+    }
+
+    BackendController.prototype.all = function(name) {
+      return this.backends[this.read].interface.all(name);
+    };
+
+    BackendController.prototype.get = function(name, id) {
+      return this.backends[this.read].interface.get(name, id);
+    };
+
+    BackendController.prototype.find = function(name, query) {
+      return this.backends[this.read].interface.find(name, query);
+    };
+
+    BackendController.prototype.save = function(name, id, versions, backends) {
+      var backend, bname, log_msg;
+      if (backends == null) backends = this.backends;
+      for (bname in backends) {
+        if (!__hasProp.call(backends, bname)) continue;
+        backend = backends[bname];
+        log_msg = 'save' + this.delim + JSON.stringify([name, id, versions]);
+        if (backend.pending_log.length) {
+          backend.pending_log.push(log_msg);
+          this.commit_logs();
+          this.exec_log();
+          return false;
+        }
+        if (!backend.interface.save(name, id, versions)) {
+          backend.pending_log.push(log_msg);
+          this.commit_logs();
+          return false;
+        }
+      }
+      return true;
+    };
+
+    BackendController.prototype["delete"] = function(name, id, backends) {
+      var backend, bname, log_msg;
+      if (backends == null) backends = this.backends;
+      for (bname in backends) {
+        if (!__hasProp.call(backends, bname)) continue;
+        backend = backends[bname];
+        log_msg = 'delete' + this.delim + JSON.stringify([name, id]);
+        if (backend.pending_log.length) {
+          backend.pending_log.push(log_msg);
+          this.commit_logs();
+          this.exec_log();
+          return false;
+        }
+        if (!backend.interface["delete"](name, id)) {
+          backend.pending_log.push(log_msg);
+          this.commit_logs();
+          return false;
+        }
+      }
+      return true;
+    };
+
+    BackendController.prototype.exec_log = function() {
+      var action, backend, bends, fn, log, msg, name, params, _i, _len, _ref;
+      _ref = this.backends;
+      for (name in _ref) {
+        if (!__hasProp.call(_ref, name)) continue;
+        backend = _ref[name];
+        log = backend.pending_log;
+        for (_i = 0, _len = log.length; _i < _len; _i++) {
+          msg = log[_i];
+          action = msg.split(this.delim);
+          fn = Flakey.models.backend_controller.backends[name].interface[action[0]];
+          params = JSON.parse(action[1]);
+          bends = {};
+          bends[name] = backend;
+          params.push(bends);
+          if (fn.apply(Flakey.models.backend_controller.backends[name].interface, params)) {
+            backend.pending_log.shift();
+          } else {
+            break;
+          }
+        }
+      }
+      return this.commit_logs();
+    };
+
+    BackendController.prototype.commit_logs = function(backends) {
+      var backend, name;
+      if (backends == null) backends = this.backends;
+      for (name in backends) {
+        if (!__hasProp.call(backends, name)) continue;
+        backend = backends[name];
+        localStorage[backend.log_key] = JSON.stringify(backend.pending_log);
+      }
+      return true;
+    };
+
+    BackendController.prototype.load_logs = function(backends) {
+      var backend, name;
+      if (backends == null) backends = this.backends;
+      for (name in backends) {
+        if (!__hasProp.call(backends, name)) continue;
+        backend = backends[name];
+        if (!(localStorage[backend.log_key] != null)) break;
+        backend.pending_log = JSON.parse(localStorage[backend.log_key]);
+      }
+      return true;
+    };
+
+    BackendController.prototype.sync = function(name, backends) {
+      var backend, bname, item, key, output, store, _i, _len, _ref, _ref2, _results;
+      if (backends == null) backends = this.backends;
+      store = {};
+      for (bname in backends) {
+        if (!__hasProp.call(backends, bname)) continue;
+        backend = backends[bname];
+        _ref = backend.interface.all(name);
+        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+          item = _ref[_i];
+          if (_ref2 = item.id, __indexOf.call(Object.keys(store), _ref2) >= 0) {
+            store[item.id].versions = this.merge_version_lists(item.versions, store[item.id].versions);
+          } else {
+            store[item.id] = item;
+          }
+        }
+      }
+      output = [];
+      for (key in store) {
+        if (!__hasProp.call(store, key)) continue;
+        item = store[key];
+        output.push(item);
+      }
+      _results = [];
+      for (bname in backends) {
+        if (!__hasProp.call(backends, bname)) continue;
+        backend = backends[bname];
+        _results.push(backend.interface._write(name, output));
+      }
+      return _results;
+    };
+
+    BackendController.prototype.merge_version_lists = function(a, b) {
+      var key, keys, output, rev, temp, value, _i, _j, _len, _len2, _ref, _ref2, _ref3;
+      temp = {};
+      _ref = a.concat(b);
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        rev = _ref[_i];
+        if (_ref2 = rev.time, __indexOf.call(Object.keys(temp), _ref2) >= 0) {
+          if (rev.id !== temp[rev.time].id) {
+            _ref3 = rev.fields;
+            for (key in _ref3) {
+              if (!__hasProp.call(_ref3, key)) continue;
+              value = _ref3[key];
+              temp[rev.time].fields[key] = value;
+            }
+          } else {
+            temp[rev.time] = rev;
+          }
+        } else {
+          temp[rev.time] = rev;
+        }
+      }
+      keys = Object.keys(temp);
+      keys.sort(function(a, b) {
+        return a - b;
+      });
+      output = [];
+      for (_j = 0, _len2 = keys.length; _j < _len2; _j++) {
+        key = keys[_j];
+        output.push(temp[key]);
+      }
+      return output;
+    };
+
+    return BackendController;
+
+  })();
+
+  Backend = (function() {
+
+    function Backend() {}
+
+    Backend.prototype.all = function(name) {
+      var store;
+      store = this._read(name);
+      if (!store) return [];
+      return store;
+    };
+
+    Backend.prototype.get = function(name, id) {
+      var index, store;
+      store = this._read(name);
+      index = this._query_by_id(name, id);
+      if (index === -1) return;
+      return store[index];
+    };
+
+    Backend.prototype.find = function(name, query) {
+      var i, iset, set, store, _i, _len;
+      store = this._read(name);
+      iset = this._query(name, query);
+      set = [];
+      for (_i = 0, _len = iset.length; _i < _len; _i++) {
+        i = iset[_i];
+        set.push(store[i]);
+      }
+      return set;
+    };
+
+    Backend.prototype.save = function(name, id, versions) {
+      var index, obj, store;
+      store = this._read(name);
+      if (!store) store = [];
+      index = this._query_by_id(name, id);
+      obj = {
+        id: id,
+        versions: versions
+      };
+      if (index === -1) {
+        store.push(obj);
+      } else {
+        store[index] = obj;
+      }
+      return this._write(name, store);
+    };
+
+    Backend.prototype["delete"] = function(name, id) {
+      var index, store;
+      store = this._read(name);
+      index = this._query_by_id(name, id);
+      if (index === -1) return true;
+      store.splice(index, 1);
+      return this._write(name, store);
+    };
+
+    Backend.prototype._query = function(name, query) {
+      var i, key, obj, rendered, set, store, value, _i, _len;
+      store = this._read(name);
+      if (!store) return [];
+      set = [];
+      i = 0;
+      for (_i = 0, _len = store.length; _i < _len; _i++) {
+        obj = store[_i];
+        rendered = this._render_obj(obj);
+        for (key in query) {
+          if (!__hasProp.call(query, key)) continue;
+          value = query[key];
+          if (rendered[key] === value) set.push(i);
+        }
+        i++;
+      }
+      return set;
+    };
+
+    Backend.prototype._query_by_id = function(name, id) {
+      var i, obj, store, _i, _len;
+      store = this._read(name);
+      if (!store) return -1;
+      i = 0;
+      for (_i = 0, _len = store.length; _i < _len; _i++) {
+        obj = store[_i];
+        if (obj.id === id) return i;
+        i++;
+      }
+      return -1;
+    };
+
+    Backend.prototype._render_obj = function(obj) {
+      var key, output, patches, rev, value, _i, _len, _ref, _ref2;
+      output = {};
+      _ref = obj.versions;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        rev = _ref[_i];
+        _ref2 = rev.fields;
+        for (key in _ref2) {
+          if (!__hasProp.call(_ref2, key)) continue;
+          value = _ref2[key];
+          if (value.constructor === 'Patch') {
+            patches = Flakey.diff_patch.patch_fromText(value.patch_text);
+            output[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0];
+          } else {
+            output[key] = value;
+          }
+        }
+      }
+      return output;
+    };
+
+    return Backend;
+
+  })();
+
+  MemoryBackend = (function(_super) {
+
+    __extends(MemoryBackend, _super);
+
+    function MemoryBackend() {
+      if (!window.memcache) window.memcache = {};
+    }
+
+    MemoryBackend.prototype._read = function(name) {
+      return window.memcache[name];
+    };
+
+    MemoryBackend.prototype._write = function(name, store) {
+      window.memcache[name] = store;
+      return true;
+    };
+
+    return MemoryBackend;
+
+  })(Backend);
+
+  LocalBackend = (function(_super) {
+
+    __extends(LocalBackend, _super);
+
+    function LocalBackend() {
+      this.prefix = 'flakey-';
+    }
+
+    LocalBackend.prototype._read = function(name) {
+      var store;
+      if (!localStorage[this.prefix + name]) {
+        localStorage[this.prefix + name] = JSON.stringify([]);
+      }
+      store = JSON.parse(localStorage[this.prefix + name]);
+      return store;
+    };
+
+    LocalBackend.prototype._write = function(name, store) {
+      localStorage[this.prefix + name] = JSON.stringify(store);
+      return true;
+    };
+
+    return LocalBackend;
+
+  })(Backend);
+
+  ServerBackend = (function(_super) {
+
+    __extends(ServerBackend, _super);
+
+    function ServerBackend() {
+      ServerBackend.__super__.constructor.apply(this, arguments);
+    }
+
+    ServerBackend.prototype.build_endpoint_url = function(name, id, params) {
+      var querystring, url;
+      url = "" + Flakey.settings.base_model_endpoint + "/" + name;
+      if (id != null) url += "/" + id;
+      if ((params != null) && params.constructor === Object) {
+        querystring = Flakey.util.querystring.build(params);
+        url += "?" + querystring;
+      }
+      return url;
+    };
+
+    ServerBackend.prototype.all = function(name) {
+      var store;
+      store = false;
+      $.ajax({
+        async: false,
+        url: this.build_endpoint_url(name),
+        dataType: 'json',
+        error: function() {
+          return Flakey.status.server_online = false;
+        },
+        success: function(data) {
+          Flakey.status.server_online = true;
+          return store = data;
+        },
+        type: 'GET'
+      });
+      return store;
+    };
+
+    ServerBackend.prototype.get = function(name, id) {
+      var obj;
+      obj = false;
+      $.ajax({
+        async: false,
+        url: this.build_endpoint_url(name, id),
+        dataType: 'json',
+        error: function() {
+          return Flakey.status.server_online = false;
+        },
+        success: function(data) {
+          Flakey.status.server_online = true;
+          return obj = data;
+        },
+        type: 'GET'
+      });
+      return obj;
+    };
+
+    ServerBackend.prototype.save = function(name, id, versions) {
+      var status;
+      status = false;
+      $.ajax({
+        async: false,
+        url: this.build_endpoint_url(name, id),
+        data: Flakey.util.querystring.build({
+          id: id,
+          versions: JSON.stringify(versions)
+        }),
+        dataType: 'json',
+        error: function() {
+          return Flakey.status.server_online = false;
+        },
+        success: function() {
+          Flakey.status.server_online = true;
+          return status = true;
+        },
+        type: 'POST'
+      });
+      return status;
+    };
+
+    ServerBackend.prototype["delete"] = function(name, id) {
+      var status;
+      status = false;
+      $.ajax({
+        async: false,
+        url: this.build_endpoint_url(name, id),
+        dataType: 'json',
+        error: function() {
+          return Flakey.status.server_online = false;
+        },
+        success: function() {
+          Flakey.status.server_online = true;
+          return status = true;
+        },
+        type: 'DELETE'
+      });
+      return status;
+    };
+
+    ServerBackend.prototype._query = function(name, query) {
+      throw new TypeError("_query not supported on server backend");
+    };
+
+    ServerBackend.prototype._query_by_id = function(name, id) {
+      throw new TypeError("_query_by_id not supported on server backend");
+    };
+
+    ServerBackend.prototype._read = function(name) {
+      return this.all(name);
+    };
+
+    ServerBackend.prototype._write = function(name, store) {
+      var item, status, _i, _len;
+      status = true;
+      for (_i = 0, _len = store.length; _i < _len; _i++) {
+        item = store[_i];
+        if (!this.save(name, item.id, item.versions)) status = false;
+      }
+      return status;
+    };
+
+    return ServerBackend;
+
+  })(Backend);
+
+  Flakey.models = {
+    Model: Model,
+    backend_controller: new BackendController()
+  };
+
+  Controller = (function() {
+
+    function Controller(config) {
+      var name, _i, _len, _ref;
+      if (config == null) config = {};
+      this.active = this.active || false;
+      this.actions = this.actions || {};
+      this.id = this.id || '';
+      this.class_name = this.class_name || '';
+      this.parent = this.parent || null;
+      this.container = this.container || null;
+      this.container_html = this.container_html || '';
+      this.subcontrollers = this.subcontrollers || [];
+      this.query_params = this.query_params || {};
+      this.container = $(document.createElement('div'));
+      this.container.html(this.container_html);
+      this.parent = config.parent || Flakey.settings.container;
+      this.parent.append(this.container);
+      this.container.attr('id', this.id);
+      _ref = this.class_name.split(' ');
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        name = _ref[_i];
+        this.container.addClass(name);
+      }
+    }
+
+    Controller.prototype.append = function() {
+      var Contr, contr, _i, _len, _results;
+      _results = [];
+      for (_i = 0, _len = arguments.length; _i < _len; _i++) {
+        Contr = arguments[_i];
+        contr = new Contr({
+          parent: this.parent
+        });
+        _results.push(this.subcontrollers.push(contr));
+      }
+      return _results;
+    };
+
+    Controller.prototype.render = function() {
+      return this.html('');
+    };
+
+    Controller.prototype.bind_actions = function() {
+      var action, fn, key, key_parts, selector, _ref, _results;
+      _ref = this.actions;
+      _results = [];
+      for (key in _ref) {
+        if (!__hasProp.call(_ref, key)) continue;
+        fn = _ref[key];
+        key_parts = key.split(' ');
+        action = key_parts.shift();
+        selector = key_parts.join(' ');
+        _results.push($(selector).bind(action, this[fn]));
+      }
+      return _results;
+    };
+
+    Controller.prototype.unbind_actions = function() {
+      var action, fn, key, key_parts, selector, _ref, _results;
+      _ref = this.actions;
+      _results = [];
+      for (key in _ref) {
+        if (!__hasProp.call(_ref, key)) continue;
+        fn = _ref[key];
+        key_parts = key.split(' ');
+        action = key_parts.shift();
+        selector = key_parts.join(' ');
+        _results.push($(selector).unbind(action, this[fn]));
+      }
+      return _results;
+    };
+
+    Controller.prototype.html = function(htm) {
+      this.container_html = htm;
+      this.container.html(this.container_html);
+      return Flakey.events.trigger('html_updated');
+    };
+
+    Controller.prototype.make_active = function() {
+      var sub, _i, _len, _ref, _results;
+      this.active = true;
+      this.render();
+      this.bind_actions();
+      this.container.removeClass('passive').addClass('active');
+      _ref = this.subcontrollers;
+      _results = [];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        sub = _ref[_i];
+        _results.push(sub.make_active());
+      }
+      return _results;
+    };
+
+    Controller.prototype.make_inactive = function() {
+      var sub, _i, _len, _ref, _results;
+      this.active = false;
+      this.unbind_actions();
+      this.container.removeClass('active').addClass('passive');
+      _ref = this.subcontrollers;
+      _results = [];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        sub = _ref[_i];
+        _results.push(sub.make_inactive());
+      }
+      return _results;
+    };
+
+    Controller.prototype.set_queryparams = function(params) {
+      var sub, _i, _len, _ref, _results;
+      this.query_params = params;
+      _ref = this.subcontrollers;
+      _results = [];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        sub = _ref[_i];
+        _results.push(sub.set_queryparams(params));
+      }
+      return _results;
+    };
+
+    return Controller;
+
+  })();
+
+  Stack = (function() {
+
+    function Stack(config) {
+      var contr, name, _i, _len, _ref, _ref2;
+      if (config == null) config = {};
+      this.resolve = __bind(this.resolve, this);
+      this.id = this.id || '';
+      this.class_name = this.class_name || '';
+      this.active = this.active || false;
+      this.controllers = this.controllers || {};
+      this.routes = this.routes || {};
+      this["default"] = this["default"] || '';
+      this.active_controller = this.active_controller || '';
+      this.parent = this.parent || null;
+      this.query_params = this.query_params || {};
+      this.container = $(document.createElement('div'));
+      this.container.attr('id', this.id);
+      _ref = this.class_name.split(' ');
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        name = _ref[_i];
+        this.container.addClass(name);
+      }
+      this.container.html(this.container_html);
+      this.parent = config.parent || Flakey.settings.container;
+      this.parent.append(this.container);
+      _ref2 = this.controllers;
+      for (name in _ref2) {
+        if (!__hasProp.call(_ref2, name)) continue;
+        contr = _ref2[name];
+        this.controllers[name] = new contr({
+          parent: this.container
+        });
+      }
+      window.addEventListener('hashchange', this.resolve, false);
+    }
+
+    Stack.prototype.resolve = function() {
+      var controller, controller_name, hash, location, name, new_controller, querystring, regex, route, _ref, _ref2;
+      hash = Flakey.util.get_hash();
+      new_controller = void 0;
+      if (hash.length > 0) {
+        if (hash.indexOf('?') !== -1) {
+          hash = hash.split('?');
+          location = hash[0];
+          querystring = hash[1];
+        } else {
+          location = hash;
+          querystring = '';
+        }
+        new_controller = void 0;
+        _ref = this.routes;
+        for (route in _ref) {
+          if (!__hasProp.call(_ref, route)) continue;
+          controller_name = _ref[route];
+          regex = new RegExp(route);
+          if (location.match(route)) new_controller = controller_name;
+        }
+      }
+      if (!new_controller) {
+        window.location.hash = "#" + this["default"];
+        return;
+      }
+      this.active_controller = new_controller;
+      this.controllers[this.active_controller].set_queryparams(Flakey.util.querystring.parse(querystring));
+      _ref2 = this.controllers;
+      for (name in _ref2) {
+        if (!__hasProp.call(_ref2, name)) continue;
+        controller = _ref2[name];
+        if (name !== this.active_controller) {
+          this.controllers[name].make_inactive();
+        }
+      }
+      if (this.active) {
+        this.controllers[this.active_controller].make_active();
+        this.controllers[this.active_controller].render();
+      }
+      return this.controllers[this.active_controller];
+    };
+
+    Stack.prototype.make_active = function() {
+      this.resolve();
+      if (this.controllers[this.active_controller] !== void 0) {
+        this.controllers[this.active_controller].make_active();
+        this.controllers[this.active_controller].render();
+      }
+      return this.active = true;
+    };
+
+    Stack.prototype.make_inactive = function() {
+      if (this.controllers[this.active_controller] !== void 0) {
+        this.controllers[this.active_controller].make_inactive();
+      }
+      return this.active = false;
+    };
+
+    Stack.prototype.set_queryparams = function(params) {
+      return this.query_params = params;
+    };
+
+    return Stack;
+
+  })();
+
+  Flakey.controllers = {
+    Stack: Stack,
+    Controller: Controller
+  };
+
+  Template = (function() {
+
+    function Template(eco, name) {
+      this.eco = eco;
+      this.name = name;
+    }
+
+    Template.prototype.render = function(context) {
+      if (context == null) context = {};
+      return this.eco(context);
+    };
+
+    return Template;
+
+  })();
+
+  get_template = function(name, tobj) {
+    var template;
+    template = tobj.ecoTemplates[name];
+    return new Template(template, name);
+  };
+
+  Flakey.templates = {
+    get_template: get_template,
+    Template: Template
+  };
+
+  module.exports = Flakey;
+
+}).call(this);
 
 });
 
@@ -13253,12 +13415,14 @@ require.define("/controllers.js", function (require, module, exports, __dirname,
     __extends(NoteEditor, _super);
 
     function NoteEditor(config) {
+      this.evolve = __bind(this.evolve, this);
       this.delete_note = __bind(this.delete_note, this);
       this.save_note = __bind(this.save_note, this);      this.id = 'note-editor';
       this.class_name = 'note-editor view';
       this.actions = {
         'click #save-note': 'save_note',
-        'click #delete-note': 'delete_note'
+        'click #delete-note': 'delete_note',
+        'change #history-slider': 'evolve'
       };
       NoteEditor.__super__.constructor.call(this, config);
       this.tmpl = Flakey.templates.get_template('editor', require('./templates/editor'));
@@ -13266,6 +13430,7 @@ require.define("/controllers.js", function (require, module, exports, __dirname,
 
     NoteEditor.prototype.render = function() {
       var context, note;
+      this.unbind_actions();
       context = {
         note: {}
       };
@@ -13273,11 +13438,13 @@ require.define("/controllers.js", function (require, module, exports, __dirname,
         note = models.Note.objects.get(this.query_params.id);
       }
       if (note != null) context.note = note;
-      return this.html(this.tmpl.render(context));
+      this.html(this.tmpl.render(context));
+      return this.bind_actions();
     };
 
     NoteEditor.prototype.save_note = function(event) {
       var note;
+      this.unbind_actions();
       if (this.query_params.id != null) {
         note = models.Note.objects.get(this.query_params.id);
       }
@@ -13285,13 +13452,18 @@ require.define("/controllers.js", function (require, module, exports, __dirname,
       note.name = $('#name').val();
       note.content = $('#content').val();
       note.save();
-      return Flakey.util.querystring.update({
+      Flakey.util.querystring.update({
         id: note.id
       });
+      this.html(this.tmpl.render({
+        note: note
+      }));
+      return this.bind_actions();
     };
 
     NoteEditor.prototype.delete_note = function(event) {
       var id, note;
+      this.unbind_actions();
       if (this.query_params.id != null) {
         note = models.Note.objects.get(this.query_params.id);
         id = note.id;
@@ -13300,9 +13472,25 @@ require.define("/controllers.js", function (require, module, exports, __dirname,
           id = 'new';
         }
       }
-      return Flakey.util.querystring.update({
+      Flakey.util.querystring.update({
         id: id
       });
+      return this.bind_actions();
+    };
+
+    NoteEditor.prototype.evolve = function() {
+      var note, time, version, version_id, version_index;
+      this.unbind_actions();
+      version_index = $('#history-slider').val();
+      note = models.Note.objects.get(this.query_params.id);
+      version_id = note.versions[version_index].version_id;
+      time = new Date(note.versions[version_index].time);
+      console.log(time.toString());
+      version = note.evolve(version_id);
+      $('#name').val(version.name);
+      $('#content').val(version.content);
+      $('#when').html(time.toLocaleString());
+      return this.bind_actions();
     };
 
     return NoteEditor;
@@ -13397,25 +13585,25 @@ require.define("/templates/selector.js", function (require, module, exports, __d
       (function() {
         var note, _i, _len, _ref;
       
-        __out.push('<ul>\n  <li id="new" class="note ');
+        __out.push('<div>\n  <ul>\n    <li id="new" class="note ');
       
         __out.push(__sanitize(!(this.selected != null) || this.selected === "new" ? "selected" : ""));
       
-        __out.push('">New Note</li>\n  \n  ');
+        __out.push('">New Note</li>\n  \n    ');
       
         _ref = this.notes;
         for (_i = 0, _len = _ref.length; _i < _len; _i++) {
           note = _ref[_i];
-          __out.push('\n    <li id="');
+          __out.push('\n      <li id="');
           __out.push(__sanitize(note.id));
           __out.push('" class="note ');
           __out.push(__sanitize((this.selected != null) && note.id.toString() === this.selected.toString() ? "selected" : ""));
           __out.push('">');
           __out.push(__sanitize(note.name));
-          __out.push('</li>\n  ');
+          __out.push('</li>\n    ');
         }
       
-        __out.push('\n</ul>');
+        __out.push('\n  </ul>\n</div>');
       
       }).call(this);
       
@@ -13469,6 +13657,7 @@ require.define("/templates/editor.js", function (require, module, exports, __dir
     }
     (function() {
       (function() {
+        var saved;
       
         __out.push('<div>\n  <input type="text" name="name" id="name" value="');
       
@@ -13478,7 +13667,27 @@ require.define("/templates/editor.js", function (require, module, exports, __dir
       
         __out.push(__sanitize(this.note.content || "Type you note here..."));
       
-        __out.push('</textarea>\n    \n  <input type="button" id="save-note" name="save-note" value="Save Note" />\n  <input type="button" id="delete-note" name="delete-note" value="Delete Note" />\n</div>');
+        __out.push('</textarea>\n    \n  <input type="button" id="save-note" name="save-note" value="Save Note" />\n  \n  ');
+      
+        if (this.note.versions) {
+          __out.push('\n    ');
+          saved = new Date(this.note.versions[this.note.versions.length - 1].time);
+          __out.push('\n    <div id="last-saved">Last saved on: ');
+          __out.push(__sanitize(saved.toLocaleString()));
+          __out.push('</div>\n  ');
+        }
+      
+        __out.push('\n  \n  ');
+      
+        if (this.note.versions.length > 1) {
+          __out.push('\n    <div id="history">\n      <label for="history-slider">History</label>\n      <input id="history-slider" name="history-slider" type="range" min="0" max="');
+          __out.push(__sanitize(this.note.versions.length - 1));
+          __out.push('" step="1" value="');
+          __out.push(__sanitize(this.note.versions.length - 1));
+          __out.push('" />\n    </div>\n    <div id="when"></div>\n  ');
+        }
+      
+        __out.push('\n  \n  <input type="button" id="delete-note" name="delete-note" value="Delete Note" />\n</div>');
       
       }).call(this);
       

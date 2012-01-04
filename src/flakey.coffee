@@ -9,6 +9,10 @@ Flakey = {
     diff_text: true
     container: undefined
     read_backend: 'memory'
+    base_model_endpoint: null #'/api'
+  }
+  status: {
+    server_online: undefined 
   }
 }
 

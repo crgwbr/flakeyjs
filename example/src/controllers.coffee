@@ -46,22 +46,26 @@ class NoteEditor extends Flakey.controllers.Controller
     @actions = {
       'click #save-note': 'save_note'
       'click #delete-note': 'delete_note'
+      'change #history-slider': 'evolve'
     }
     super(config)
     
     @tmpl =  Flakey.templates.get_template('editor', require('./templates/editor'))
 
   render: () ->
+    @unbind_actions()
     context = {note: {}}
     if @query_params.id?
       note = models.Note.objects.get(@query_params.id)
     
     if note?
       context.note = note
-      
+    
     @html @tmpl.render(context)
+    @bind_actions()
     
   save_note: (event) =>
+    @unbind_actions()
     if @query_params.id?
       note = models.Note.objects.get(@query_params.id)
     
@@ -72,8 +76,11 @@ class NoteEditor extends Flakey.controllers.Controller
     note.content = $('#content').val()
     note.save()
     Flakey.util.querystring.update({id: note.id})
+    @html @tmpl.render({note: note})
+    @bind_actions()
     
   delete_note: (event) =>
+    @unbind_actions()
     if @query_params.id?
       note = models.Note.objects.get(@query_params.id)
       
@@ -82,7 +89,21 @@ class NoteEditor extends Flakey.controllers.Controller
         note.delete()
         id = 'new'
     Flakey.util.querystring.update({id: id})
-      
+    @bind_actions()
+    
+  evolve: () =>
+    @unbind_actions()
+    version_index = $('#history-slider').val()
+    note = models.Note.objects.get(@query_params.id)
+    version_id = note.versions[version_index].version_id
+    time = new Date(note.versions[version_index].time)
+    console.log time.toString()
+    
+    version = note.evolve(version_id)
+    $('#name').val(version.name)
+    $('#content').val(version.content)
+    $('#when').html(time.toLocaleString())
+    @bind_actions()
 
 
 class MainController extends Flakey.controllers.Controller

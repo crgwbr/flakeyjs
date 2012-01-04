@@ -12,7 +12,7 @@ $ = Flakey.$
 
 models = require('./models')
 controllers = require('./controllers')
-  
+
 
 $(document).ready () ->
   settings = {

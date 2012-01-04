@@ -11939,7 +11939,7 @@ if (!JSON) {
         };
     }
 }());;
-  var $, Backend, BackendController, Controller, Events, Flakey, JSON, LocalBackend, MemoryBackend, Model, Stack, Template, get_template,
+  var $, Backend, BackendController, Controller, Events, Flakey, JSON, LocalBackend, MemoryBackend, Model, ServerBackend, Stack, Template, get_template,
     __hasProp = Object.prototype.hasOwnProperty,
     __indexOf = Array.prototype.indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; },
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; },
@@ -11950,7 +11950,11 @@ if (!JSON) {
     settings: {
       diff_text: true,
       container: void 0,
-      read_backend: 'memory'
+      read_backend: 'memory',
+      base_model_endpoint: null
+    },
+    status: {
+      server_online: void 0
     }
   };
 
@@ -12172,7 +12176,7 @@ if (!JSON) {
             obj[key] = value;
           }
         }
-        if (version_id !== void 0 && version_id === rev.verson_id) return obj;
+        if (version_id !== void 0 && version_id === rev.version_id) return obj;
       }
       return obj;
     };
@@ -12236,6 +12240,13 @@ if (!JSON) {
           interface: new LocalBackend()
         }
       };
+      if (Flakey.settings.base_model_endpoint) {
+        this.backends['server'] = {
+          log_key: 'flakey-server-log',
+          pending_log: [],
+          interface: new ServerBackend()
+        };
+      }
       this.read = Flakey.settings.read_backend || 'memory';
       this.load_logs();
     }
@@ -12262,9 +12273,7 @@ if (!JSON) {
         if (backend.pending_log.length) {
           backend.pending_log.push(log_msg);
           this.commit_logs();
-          this.exec_log({
-            bname: backend
-          });
+          this.exec_log();
           return false;
         }
         if (!backend.interface.save(name, id, versions)) {
@@ -12286,9 +12295,7 @@ if (!JSON) {
         if (backend.pending_log.length) {
           backend.pending_log.push(log_msg);
           this.commit_logs();
-          this.exec_log({
-            name: backend
-          });
+          this.exec_log();
           return false;
         }
         if (!backend.interface["delete"](name, id)) {
@@ -12300,33 +12307,29 @@ if (!JSON) {
       return true;
     };
 
-    BackendController.prototype.exec_log = function(backends) {
-      var action, backend, fn, msg, name, params, _results;
-      if (backends == null) backends = this.backends;
-      _results = [];
-      for (name in backends) {
-        if (!__hasProp.call(backends, name)) continue;
-        backend = backends[name];
-        _results.push((function() {
-          var _results2;
-          _results2 = [];
-          while (msg = backend.pending_log.shift()) {
-            action = this[msg.split(this.delim)];
-            fn = action[0];
-            params = JSON.parse(action[1]);
-            params.push({
-              name: backend
-            });
-            if (!action.apply(this, params)) {
-              backend.pending_log.unshift(msg);
-              break;
-            }
-            _results2.push(this.commit_logs());
+    BackendController.prototype.exec_log = function() {
+      var action, backend, bends, fn, log, msg, name, params, _i, _len, _ref;
+      _ref = this.backends;
+      for (name in _ref) {
+        if (!__hasProp.call(_ref, name)) continue;
+        backend = _ref[name];
+        log = backend.pending_log;
+        for (_i = 0, _len = log.length; _i < _len; _i++) {
+          msg = log[_i];
+          action = msg.split(this.delim);
+          fn = Flakey.models.backend_controller.backends[name].interface[action[0]];
+          params = JSON.parse(action[1]);
+          bends = {};
+          bends[name] = backend;
+          params.push(bends);
+          if (fn.apply(Flakey.models.backend_controller.backends[name].interface, params)) {
+            backend.pending_log.shift();
+          } else {
+            break;
           }
-          return _results2;
-        }).call(this));
+        }
       }
-      return _results;
+      return this.commit_logs();
     };
 
     BackendController.prototype.commit_logs = function(backends) {
@@ -12582,6 +12585,131 @@ if (!JSON) {
 
   })(Backend);
 
+  ServerBackend = (function(_super) {
+
+    __extends(ServerBackend, _super);
+
+    function ServerBackend() {
+      ServerBackend.__super__.constructor.apply(this, arguments);
+    }
+
+    ServerBackend.prototype.build_endpoint_url = function(name, id, params) {
+      var querystring, url;
+      url = "" + Flakey.settings.base_model_endpoint + "/" + name;
+      if (id != null) url += "/" + id;
+      if ((params != null) && params.constructor === Object) {
+        querystring = Flakey.util.querystring.build(params);
+        url += "?" + querystring;
+      }
+      return url;
+    };
+
+    ServerBackend.prototype.all = function(name) {
+      var store;
+      store = false;
+      $.ajax({
+        async: false,
+        url: this.build_endpoint_url(name),
+        dataType: 'json',
+        error: function() {
+          return Flakey.status.server_online = false;
+        },
+        success: function(data) {
+          Flakey.status.server_online = true;
+          return store = data;
+        },
+        type: 'GET'
+      });
+      return store;
+    };
+
+    ServerBackend.prototype.get = function(name, id) {
+      var obj;
+      obj = false;
+      $.ajax({
+        async: false,
+        url: this.build_endpoint_url(name, id),
+        dataType: 'json',
+        error: function() {
+          return Flakey.status.server_online = false;
+        },
+        success: function(data) {
+          Flakey.status.server_online = true;
+          return obj = data;
+        },
+        type: 'GET'
+      });
+      return obj;
+    };
+
+    ServerBackend.prototype.save = function(name, id, versions) {
+      var status;
+      status = false;
+      $.ajax({
+        async: false,
+        url: this.build_endpoint_url(name, id),
+        data: Flakey.util.querystring.build({
+          id: id,
+          versions: JSON.stringify(versions)
+        }),
+        dataType: 'json',
+        error: function() {
+          return Flakey.status.server_online = false;
+        },
+        success: function() {
+          Flakey.status.server_online = true;
+          return status = true;
+        },
+        type: 'POST'
+      });
+      return status;
+    };
+
+    ServerBackend.prototype["delete"] = function(name, id) {
+      var status;
+      status = false;
+      $.ajax({
+        async: false,
+        url: this.build_endpoint_url(name, id),
+        dataType: 'json',
+        error: function() {
+          return Flakey.status.server_online = false;
+        },
+        success: function() {
+          Flakey.status.server_online = true;
+          return status = true;
+        },
+        type: 'DELETE'
+      });
+      return status;
+    };
+
+    ServerBackend.prototype._query = function(name, query) {
+      throw new TypeError("_query not supported on server backend");
+    };
+
+    ServerBackend.prototype._query_by_id = function(name, id) {
+      throw new TypeError("_query_by_id not supported on server backend");
+    };
+
+    ServerBackend.prototype._read = function(name) {
+      return this.all(name);
+    };
+
+    ServerBackend.prototype._write = function(name, store) {
+      var item, status, _i, _len;
+      status = true;
+      for (_i = 0, _len = store.length; _i < _len; _i++) {
+        item = store[_i];
+        if (!this.save(name, item.id, item.versions)) status = false;
+      }
+      return status;
+    };
+
+    return ServerBackend;
+
+  })(Backend);
+
   Flakey.models = {
     Model: Model,
     backend_controller: new BackendController()
@@ -12654,7 +12782,7 @@ if (!JSON) {
         fn = _ref[key];
         key_parts = key.split(' ');
         action = key_parts.shift();
-        selector = key_part.join(' ');
+        selector = key_parts.join(' ');
         _results.push($(selector).unbind(action, this[fn]));
       }
       return _results;
