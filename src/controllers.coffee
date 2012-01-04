@@ -108,7 +108,7 @@ class Stack
         querystring = hash[1]
       else
         location = hash
-        querystring = ""
+        querystring = ''
       new_controller = undefined
       for own route, controller_name of @routes
         regex = new RegExp(route)

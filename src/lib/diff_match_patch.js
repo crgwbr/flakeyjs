@@ -2184,4 +2184,4 @@ diff_match_patch.patch_obj.prototype.toString = function() {
 this['diff_match_patch'] = diff_match_patch;
 this['DIFF_DELETE'] = DIFF_DELETE;
 this['DIFF_INSERT'] = DIFF_INSERT;
-this['DIFF_EQUAL'] = DIFF_EQUAL;
+this['DIFF_EQUAL'] = DIFF_EQUAL

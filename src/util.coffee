@@ -45,7 +45,7 @@ Flakey.util = {
     # Build a querystring out of an obj
     build: (params) ->
       if not params or params.constructor != Object
-        return ""
+        return ''
       pairs = []
       for own key, value of params
         pairs.push "#{encodeURIComponent(key)}=#{encodeURIComponent(value)}"
@@ -74,7 +74,7 @@ Flakey.util = {
 class Events
   events: {}
   
-  register: (event, fn, namespace = "flakey") ->
+  register: (event, fn, namespace = 'flakey') ->
     if @events[namespace] == undefined
       @events[namespace] = {}
     if @events[namespace][event] == undefined
@@ -82,7 +82,7 @@ class Events
     @events[namespace][event].push(fn)
     return @events[namespace][event]
     
-  trigger: (event, namespace = "flakey") ->
+  trigger: (event, namespace = 'flakey') ->
     if @events[namespace] == undefined
       @events[namespace] = {}
     if @events[namespace][event] == undefined
@@ -92,7 +92,7 @@ class Events
       output.push(fn())
     return output
     
-  clear: (namespace = "flakey") ->
+  clear: (namespace = 'flakey') ->
     @events[namespace] = {}
   
 Flakey.events = new Events()

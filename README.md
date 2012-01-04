@@ -15,9 +15,7 @@ To compile flakey.js from source:
 - npm (normally installed with nodejs)
 - cake (normally installed with nodejs)
 - coffeescript
-- jqueryify
-- jsonify
 
-To compile the sample note taking app (example/*), all listed above plus:
-- browserify
-- eco
+To compile the sample note taking app (example/*), all of the above plus:
+- browserify (npm install browserify)
+- eco (npm install -g eco)

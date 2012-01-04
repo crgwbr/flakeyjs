@@ -39,11 +39,11 @@ class Model
     for key in Object.keys(new_obj)
       if new_obj[key] != old_obj[key]
         if new_obj[key].constructor == String
-          old_obj[key] = if old_obj[key]? then old_obj[key].toString() else ""
+          old_obj[key] = if old_obj[key]? then old_obj[key].toString() else ''
         if new_obj[key].constructor == String and old_obj[key].constructor == String and Flakey.settings.diff_text
           patches = Flakey.diff_patch.patch_make(old_obj[key], new_obj[key])
           save[key] = {
-            constructor: "Patch"
+            constructor: 'Patch'
             patch_text: Flakey.diff_patch.patch_toText(patches)
           }
         else
@@ -60,9 +60,9 @@ class Model
     obj = {}
     for rev in @versions
       for own key, value of rev.fields
-        if value.constructor == "Patch"
+        if value.constructor == 'Patch'
           patches = Flakey.diff_patch.patch_fromText(value.patch_text)
-          obj[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || "")[0]
+          obj[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0]
         else
           obj[key] = value
       if version_id != undefined and version_id == rev.verson_id
@@ -98,7 +98,7 @@ class Model
 
 class BackendController
   constructor: () ->
-    @delim = ":::"
+    @delim = ':::'
     @backends = {
       memory: {
         log_key: 'flakey-memory-log'
@@ -126,7 +126,7 @@ class BackendController
     
   save: (name, id, versions, backends = @backends) ->
     for own bname, backend of backends
-      log_msg = "save" + @delim + JSON.stringify([name, id, versions])
+      log_msg = 'save' + @delim + JSON.stringify([name, id, versions])
       if backend.pending_log.length
         backend.pending_log.push(log_msg)
         @commit_logs()
@@ -140,7 +140,7 @@ class BackendController
       
   delete: (name, id, backends = @backends) ->
     for own bname, backend of backends
-      log_msg = "delete" + @delim + JSON.stringify([name, id])
+      log_msg = 'delete' + @delim + JSON.stringify([name, id])
       if backend.pending_log.length
         backend.pending_log.push(log_msg)
         @commit_logs()
@@ -302,9 +302,9 @@ class Backend
     output = {}
     for rev in obj.versions
       for own key, value of rev.fields
-        if value.constructor == "Patch"
+        if value.constructor == 'Patch'
           patches = Flakey.diff_patch.patch_fromText(value.patch_text)
-          output[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || "")[0]
+          output[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0]
         else
           output[key] = value
     return output
@@ -327,7 +327,7 @@ class MemoryBackend extends Backend
 # LocalStorage Backend
 class LocalBackend extends Backend
   constructor: () ->
-    @prefix = "flakey-"
+    @prefix = 'flakey-'
     
   _read: (name) ->
     if not localStorage[@prefix + name]

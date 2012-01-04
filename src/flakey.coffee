@@ -12,8 +12,9 @@ Flakey = {
   }
 }
 
-$ = Flakey.$ = require('jqueryify')
-JSON = Flakey.JSON = require('jsonify')
+jQuery.noConflict();
+$ = Flakey.$ = jQuery
+JSON = Flakey.JSON = JSON
 
 Flakey.init = (config) ->
   # Setup config
