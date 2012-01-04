@@ -4,7 +4,7 @@
     
   <input type="button" id="save-note" name="save-note" value="Save Note" />
   
-  <% if @note.versions: %>
+  <% if @note.versions.length > 0: %>
     <% saved = (new Date(@note.versions[@note.versions.length-1].time)) %>
     <div id="last-saved">Last saved on: <%= saved.toLocaleString() %></div>
   <% end %>

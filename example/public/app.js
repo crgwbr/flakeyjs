@@ -13431,13 +13431,15 @@ require.define("/controllers.js", function (require, module, exports, __dirname,
     NoteEditor.prototype.render = function() {
       var context, note;
       this.unbind_actions();
-      context = {
-        note: {}
-      };
+      context = {};
       if (this.query_params.id != null) {
         note = models.Note.objects.get(this.query_params.id);
       }
-      if (note != null) context.note = note;
+      if (note != null) {
+        context.note = note;
+      } else {
+        context.note = new models.Note();
+      }
       this.html(this.tmpl.render(context));
       return this.bind_actions();
     };
@@ -13669,7 +13671,7 @@ require.define("/templates/editor.js", function (require, module, exports, __dir
       
         __out.push('</textarea>\n    \n  <input type="button" id="save-note" name="save-note" value="Save Note" />\n  \n  ');
       
-        if (this.note.versions) {
+        if (this.note.versions.length > 0) {
           __out.push('\n    ');
           saved = new Date(this.note.versions[this.note.versions.length - 1].time);
           __out.push('\n    <div id="last-saved">Last saved on: ');

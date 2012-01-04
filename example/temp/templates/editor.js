@@ -51,7 +51,7 @@
       
         __out.push('</textarea>\n    \n  <input type="button" id="save-note" name="save-note" value="Save Note" />\n  \n  ');
       
-        if (this.note.versions) {
+        if (this.note.versions.length > 0) {
           __out.push('\n    ');
           saved = new Date(this.note.versions[this.note.versions.length - 1].time);
           __out.push('\n    <div id="last-saved">Last saved on: ');

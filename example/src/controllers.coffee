@@ -54,12 +54,15 @@ class NoteEditor extends Flakey.controllers.Controller
 
   render: () ->
     @unbind_actions()
-    context = {note: {}}
+    context = {}
+    
     if @query_params.id?
       note = models.Note.objects.get(@query_params.id)
     
     if note?
       context.note = note
+    else
+      context.note = new models.Note()
     
     @html @tmpl.render(context)
     @bind_actions()

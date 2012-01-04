@@ -69,13 +69,15 @@
     NoteEditor.prototype.render = function() {
       var context, note;
       this.unbind_actions();
-      context = {
-        note: {}
-      };
+      context = {};
       if (this.query_params.id != null) {
         note = models.Note.objects.get(this.query_params.id);
       }
-      if (note != null) context.note = note;
+      if (note != null) {
+        context.note = note;
+      } else {
+        context.note = new models.Note();
+      }
       this.html(this.tmpl.render(context));
       return this.bind_actions();
     };
