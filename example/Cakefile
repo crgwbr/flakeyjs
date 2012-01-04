@@ -1,0 +1,93 @@
+fs     = require 'fs'
+{exec} = require 'child_process'
+browserify = require 'browserify'
+
+
+task 'build_app', 'Build example application file from example/src/', ->
+  exec 'rm -rf temp/*', (err, stdout, stderr) ->
+    throw err if err
+    console.log stdout + stderr
+    exec 'mkdir -p temp/templates/', (err, stdout, stderr) ->
+      throw err if err
+      console.log stdout + stderr
+      console.log 'Compiling Templates...'
+      exec 'eco -o temp/templates/ src/templates/', (err, stdout, stderr) ->
+        throw err if err
+        console.log stdout + stderr
+        console.log 'Compiling Coffeescript...'
+        exec 'coffee -c -o temp/ src/', (err, stdout, stderr) ->
+          throw err if err
+          console.log stdout + stderr
+          console.log 'Tracing Dependancies...'
+          b = browserify()
+          b.addEntry('./temp/index.js')
+          file = b.bundle()
+          fs.writeFile 'public/app.js', file, 'utf8', (err) ->
+            throw err if err
+              
+              
+task 'runserver', 'Run dev server in public/ at localhost:8000', ->
+  http = require('http')
+  sys = require('util')
+  url = require('url')
+  path = require('path')
+  fs = require('fs')
+
+  contentTypeMap = {
+    txt: 'text/plain',
+    html: 'text/html',
+    xml: 'application/xml',
+    jpg: 'image/jpeg',
+    png: 'image/png',
+    tiff: 'image/tiff',
+    gif: 'image/gif',
+    js: 'text/javascript',
+    css: 'text/css'
+  }
+
+  http.createServer((req, res) ->
+    write = (code, body, headers) ->
+      if !headers
+        headers = {}
+
+      if !headers['Content-Type']
+        headers['Content-Type'] = contentTypeMap.txt
+
+      res.writeHead(code, headers)
+      res.end(body)
+
+      sys.print(req.method+' '+req.url+' '+code+' '+(body||'').length+'\n')
+
+    try
+      if req.url == "/"
+        pathname = 'index.html'
+      else
+        pathname = url.parse(req.url).pathname.substring(1)
+
+      pathname = 'public/' + pathname
+
+      if pathname.indexOf('..') != -1
+        write(404, "cannot ask for files with .. in the name\n")
+        return
+
+      path.exists pathname, (exists) ->
+        if !exists
+          write(404, "cannot find that file\n")
+          return
+
+        fs.stat pathname, (err, stats) ->
+          if err
+            write(400, "unable to read file information: "+err+"\n")
+            return
+
+          fs.readFile pathname, (err, data) ->
+            if err
+              write(400, "unable to read file: "+err+"\n")
+              return
+
+            write(200, data, {'Content-Type': contentTypeMap[path.extname(pathname).substring(1).toLowerCase()]})
+    catch e
+      res.write(500, e.toString())
+  ).listen(8000)
+
+  console.log 'Running Server on localhost:8000...'

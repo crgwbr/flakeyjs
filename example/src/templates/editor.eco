@@ -1,0 +1,7 @@
+<div>
+  <input type="text" name="name" id="name" value="<%= @note.name || "Name..." %>" />
+  <textarea name="content" id="content"><%= @note.content || "Type you note here..." %></textarea>
+    
+  <input type="button" id="save-note" name="save-note" value="Save Note" />
+  <input type="button" id="delete-note" name="delete-note" value="Delete Note" />
+</div>
