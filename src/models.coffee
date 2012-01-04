@@ -38,7 +38,16 @@ class Model
     save = {}
     for key in Object.keys(new_obj)
       if new_obj[key] != old_obj[key]
-        save[key] = new_obj[key]
+        if new_obj[key].constructor == String
+          old_obj[key] = if old_obj[key]? then old_obj[key].toString() else ""
+        if new_obj[key].constructor == String and old_obj[key].constructor == String and Flakey.settings.diff_text
+          patches = Flakey.diff_patch.patch_make(old_obj[key], new_obj[key])
+          save[key] = {
+            constructor: "Patch"
+            patch_text: Flakey.diff_patch.patch_toText(patches)
+          }
+        else
+          save[key] = new_obj[key]
     return save
   
   export: () ->
@@ -51,7 +60,11 @@ class Model
     obj = {}
     for rev in @versions
       for own key, value of rev.fields
-        obj[key] = value
+        if value.constructor == "Patch"
+          patches = Flakey.diff_patch.patch_fromText(value.patch_text)
+          obj[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || "")[0]
+        else
+          obj[key] = value
       if version_id != undefined and version_id == rev.verson_id
         return obj
     return obj
@@ -74,8 +87,10 @@ class Model
     new_obj = @export()
     old_obj = @evolve()
     diff = @diff(new_obj, old_obj)
-    @push_version(diff)
-    Flakey.models.backend_controller.save(@constructor.model_name, @id, @versions)
+    # Don't save empty versions
+    if Object.keys(diff).length > 0
+      @push_version(diff)
+      Flakey.models.backend_controller.save(@constructor.model_name, @id, @versions)
     
   delete: () ->
     Flakey.models.backend_controller.delete(@constructor.model_name, @id)
@@ -111,7 +126,6 @@ class BackendController
     
   save: (name, id, versions, backends = @backends) ->
     for own bname, backend of backends
-      console.log(bname)
       log_msg = "save" + @delim + JSON.stringify([name, id, versions])
       if backend.pending_log.length
         backend.pending_log.push(log_msg)
@@ -240,13 +254,10 @@ class Backend
       id: id,
       versions: versions
     }
-    console.log index
-    console.log obj
     if index == -1
       store.push(obj)
     else
       store[index] = obj
-    console.log(store)
     return @_write(name, store)
     
   # Delete an item by id
@@ -288,10 +299,15 @@ class Backend
   
   # Render the latest version of an object by evolving it through all its versions
   _render_obj: (obj) ->
-    obj = {}
-    for own key, value of obj.versions
-      obj[key] = value
-    return obj
+    output = {}
+    for rev in obj.versions
+      for own key, value of rev.fields
+        if value.constructor == "Patch"
+          patches = Flakey.diff_patch.patch_fromText(value.patch_text)
+          output[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || "")[0]
+        else
+          output[key] = value
+    return output
     
 
 # Virtual Backend that simply stores data in an Object (window.memcache)

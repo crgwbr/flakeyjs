@@ -4,7 +4,9 @@
 # ==========================================
 
 Flakey = {
+  diff_patch: new diff_match_patch()
   settings: {
+    diff_text: true
     container: undefined
     read_backend: 'memory'
   }
