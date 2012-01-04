@@ -10,10 +10,14 @@ Models exist as heuristic, versioned instructions rather than complete "records.
 Using browserify to add requirement support to client side code (like the included example app) is strongly recommended. However it is possible to use Flakey.js as a vanilla JS file.
 
 ### Requirements
-- node
+To compile flakey.js from source:
+- nodejs
+- npm (normally installed with nodejs)
+- cake (normally installed with nodejs)
 - coffeescript
+- jqueryify
+- jsonify
+
+To compile the sample note taking app (example/*), all listed above plus:
 - browserify
 - eco
-
-### Notes:
-flakey.js includes jQuery-1.7.1. To change this, you must replace src/lib/jquery.coffee and recompile flakey.js from source.

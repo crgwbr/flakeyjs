@@ -1,3 +1,5 @@
+node_modules
+example/node_modules
 *.pyc
 .DS_Store
 *.scssc
