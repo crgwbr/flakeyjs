@@ -17,6 +17,7 @@ html, body {
   height: 100%;
   font: 13px/1.5 Futura, Helvetica, Arial, sans-serif;
   margin: 0;
+  min-width: 800px;
 }
 
 .controller {
@@ -80,11 +81,10 @@ html, body {
   width: 80%;
   height: 100%;
   float: left;
-  overflow: auto;
   background: url('white_texture.png');
   position: relative;
   z-index: 1;
-  div {
+  div.texture {
     padding: 2%;
     height: 90%;
     input[type=button] {
@@ -103,18 +103,18 @@ html, body {
       }
     }
     #save-note {
-      left: 4%;
+      left: 2%;
     }
     #delete-note {
-      right: 4%;
+      right: 2%;
     }
     #last-saved {
       height: auto;
       font-size: 10px;
       color: #666;
       position: absolute;
-      left: 110px;
-      bottom: 18px;
+      left: 2.1%;
+      bottom: 3px;
     }
     #history {
       label {
@@ -126,7 +126,7 @@ html, body {
       font-size: 10px;
       color: #666;
       position: absolute;
-      right: 160px;
+      right: 20%;
       bottom: 25px;
       padding: 0;
     }
@@ -135,23 +135,35 @@ html, body {
       font-size: 10px;
       color: #666;
       position: absolute;
-      right: 160px;
-      bottom: 15px;
+      right: 20%;
+      bottom: 3px;
       padding: 0;
     }
     input[type=text], textarea {
+      width: auto;
+      height: auto;
       font: 18px/1.5 "Menlo", "Monaco", "Lucida Console", "Consolas", "Courier New";
-      padding: 1% 2%;
-      width: 96%;
       border-radius: 5px;
       border: 1px solid #CCC;
       outline: none;
       background: rgba(200, 200, 200, 0.2);
     }
+    input[type=text] {
+      padding: 10px;
+      position: absolute;
+      left: 2%;
+      right: 2%;
+      top: 20px;
+    }
     textarea {
+      overflow: auto;
       margin-top: 20px;
-      padding: 2% 2%;
-      height: 80%;
+      padding: 10px;
+      position: absolute;
+      left: 2%;
+      right: 2%;
+      top: 70px;
+      bottom: 70px;
     }
   }
 }

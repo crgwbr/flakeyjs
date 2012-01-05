@@ -67,28 +67,24 @@
     }
 
     NoteEditor.prototype.render = function() {
-      var context, note;
-      this.unbind_actions();
+      var context;
       context = {};
-      if (this.query_params.id != null) {
-        note = models.Note.objects.get(this.query_params.id);
-      }
-      if (note != null) {
-        context.note = note;
-      } else {
+      context.note = models.Note.objects.get(this.query_params.id);
+      if (context.note === void 0 || this.query_params.id === 'new') {
         context.note = new models.Note();
       }
       this.html(this.tmpl.render(context));
+      this.unbind_actions();
       return this.bind_actions();
     };
 
     NoteEditor.prototype.save_note = function(event) {
       var note;
-      this.unbind_actions();
-      if (this.query_params.id != null) {
-        note = models.Note.objects.get(this.query_params.id);
+      note = models.Note.objects.get(this.query_params.id);
+      if (note === void 0) {
+        note = new models.Note();
+        note.id = $('#note-id').val();
       }
-      if (!note) note = new models.Note();
       note.name = $('#name').val();
       note.content = $('#content').val();
       note.save();
@@ -98,12 +94,12 @@
       this.html(this.tmpl.render({
         note: note
       }));
+      this.unbind_actions();
       return this.bind_actions();
     };
 
     NoteEditor.prototype.delete_note = function(event) {
       var id, note;
-      this.unbind_actions();
       if (this.query_params.id != null) {
         note = models.Note.objects.get(this.query_params.id);
         id = note.id;
@@ -115,21 +111,21 @@
       Flakey.util.querystring.update({
         id: id
       });
+      this.unbind_actions();
       return this.bind_actions();
     };
 
     NoteEditor.prototype.evolve = function() {
       var note, time, version, version_id, version_index;
-      this.unbind_actions();
       version_index = $('#history-slider').val();
       note = models.Note.objects.get(this.query_params.id);
       version_id = note.versions[version_index].version_id;
       time = new Date(note.versions[version_index].time);
-      console.log(time.toString());
       version = note.evolve(version_id);
       $('#name').val(version.name);
       $('#content').val(version.content);
       $('#when').html(time.toLocaleString());
+      this.unbind_actions();
       return this.bind_actions();
     };
 

@@ -44,7 +44,7 @@ class Controller
       key_parts = key.split(' ')
       action = key_parts.shift()
       selector = key_parts.join(' ')
-      $(selector).unbind(action, @[fn])
+      $(selector).unbind(action)
   
   html: (htm) ->
     @container_html = htm

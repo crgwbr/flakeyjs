@@ -41,7 +41,7 @@
       (function() {
         var saved;
       
-        __out.push('<div>\n  <input type="text" name="name" id="name" value="');
+        __out.push('<div class="texture">\n  <input type="text" name="name" id="name" value="');
       
         __out.push(__sanitize(this.note.name || "Name..."));
       
@@ -62,14 +62,18 @@
         __out.push('\n  \n  ');
       
         if (this.note.versions.length > 1) {
-          __out.push('\n    <div id="history">\n      <label for="history-slider">History</label>\n      <input id="history-slider" name="history-slider" type="range" min="0" max="');
+          __out.push('\n    <div id="history">\n      <label for="history-slider">History Scrubber</label>\n      <input id="history-slider" name="history-slider" type="range" min="0" max="');
           __out.push(__sanitize(this.note.versions.length - 1));
           __out.push('" step="1" value="');
           __out.push(__sanitize(this.note.versions.length - 1));
           __out.push('" />\n    </div>\n    <div id="when"></div>\n  ');
         }
       
-        __out.push('\n  \n  <input type="button" id="delete-note" name="delete-note" value="Delete Note" />\n</div>');
+        __out.push('\n  \n  <input type="hidden" id="note-id" name="note-id" value="');
+      
+        __out.push(__sanitize(this.note.id));
+      
+        __out.push('" />\n  \n  <input type="button" id="delete-note" name="delete-note" value="Delete Note" />\n</div>');
       
       }).call(this);
       

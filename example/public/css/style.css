@@ -2,7 +2,8 @@ html, body {
   width: 100%;
   height: 100%;
   font: 13px/1.5 Futura, Helvetica, Arial, sans-serif;
-  margin: 0; }
+  margin: 0;
+  min-width: 800px; }
 
 .controller.view.active {
   display: block; }
@@ -68,14 +69,13 @@ html, body {
   width: 80%;
   height: 100%;
   float: left;
-  overflow: auto;
   background: url("white_texture.png");
   position: relative;
   z-index: 1; }
-  #note-editor div {
+  #note-editor div.texture {
     padding: 2%;
     height: 90%; }
-    #note-editor div input[type=button] {
+    #note-editor div.texture input[type=button] {
       font-weight: bold;
       font-size: 1em;
       display: block;
@@ -104,48 +104,59 @@ html, body {
       position: absolute;
       bottom: 20px;
       border: 1px solid #999; }
-      #note-editor div input[type=button]:active {
+      #note-editor div.texture input[type=button]:active {
         box-shadow: inset 0 0 5px #666; }
-    #note-editor div #save-note {
-      left: 4%; }
-    #note-editor div #delete-note {
-      right: 4%; }
-    #note-editor div #last-saved {
+    #note-editor div.texture #save-note {
+      left: 2%; }
+    #note-editor div.texture #delete-note {
+      right: 2%; }
+    #note-editor div.texture #last-saved {
       height: auto;
       font-size: 10px;
       color: #666;
       position: absolute;
-      left: 110px;
-      bottom: 18px; }
-    #note-editor div #history {
+      left: 2.1%;
+      bottom: 3px; }
+    #note-editor div.texture #history {
       height: auto;
       font-size: 10px;
       color: #666;
       position: absolute;
-      right: 160px;
+      right: 20%;
       bottom: 25px;
       padding: 0; }
-      #note-editor div #history label {
+      #note-editor div.texture #history label {
         position: absolute;
         top: -10px;
         left: 3px; }
-    #note-editor div #when {
+    #note-editor div.texture #when {
       height: auto;
       font-size: 10px;
       color: #666;
       position: absolute;
-      right: 160px;
-      bottom: 15px;
+      right: 20%;
+      bottom: 3px;
       padding: 0; }
-    #note-editor div input[type=text], #note-editor div textarea {
+    #note-editor div.texture input[type=text], #note-editor div.texture textarea {
+      width: auto;
+      height: auto;
       font: 18px/1.5 "Menlo", "Monaco", "Lucida Console", "Consolas", "Courier New";
-      padding: 1% 2%;
-      width: 96%;
       border-radius: 5px;
       border: 1px solid #CCC;
       outline: none;
       background: rgba(200, 200, 200, 0.2); }
-    #note-editor div textarea {
+    #note-editor div.texture input[type=text] {
+      padding: 10px;
+      position: absolute;
+      left: 2%;
+      right: 2%;
+      top: 20px; }
+    #note-editor div.texture textarea {
+      overflow: auto;
       margin-top: 20px;
-      padding: 2% 2%;
-      height: 80%; }
+      padding: 10px;
+      position: absolute;
+      left: 2%;
+      right: 2%;
+      top: 70px;
+      bottom: 70px; }
