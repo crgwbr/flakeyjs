@@ -59,7 +59,7 @@
           __out.push('</li>\n    ');
         }
       
-        __out.push('\n  </ul>\n</div>');
+        __out.push('\n  </ul>\n  <p id="by-flakey">This is a demo of <a target="_blank" href="http://flakeyjs.crgwbr.com">Flakeyjs</a></p>\n</div>');
       
       }).call(this);
       

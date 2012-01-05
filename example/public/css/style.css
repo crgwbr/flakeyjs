@@ -32,6 +32,14 @@ html, body {
   #note-selector div {
     height: 100%;
     background: rgba(200, 200, 200, 0.5); }
+    #note-selector div #by-flakey {
+      padding: 0 10px;
+      font-size: 10px;
+      position: absolute;
+      bottom: 0;
+      color: #666; }
+      #note-selector div #by-flakey a {
+        color: #444; }
     #note-selector div ul {
       margin: 0;
       padding: 0;
@@ -73,8 +81,8 @@ html, body {
   position: relative;
   z-index: 1; }
   #note-editor div.texture {
-    padding: 2%;
-    height: 90%; }
+    width: 100%;
+    height: 100%; }
     #note-editor div.texture input[type=button] {
       font-weight: bold;
       font-size: 1em;
@@ -107,34 +115,36 @@ html, body {
       #note-editor div.texture input[type=button]:active {
         box-shadow: inset 0 0 5px #666; }
     #note-editor div.texture #save-note {
-      left: 2%; }
+      left: 20px; }
     #note-editor div.texture #delete-note {
-      right: 2%; }
+      right: 20px; }
     #note-editor div.texture #last-saved {
       height: auto;
       font-size: 10px;
       color: #666;
       position: absolute;
-      left: 2.1%;
+      left: 23px;
       bottom: 3px; }
     #note-editor div.texture #history {
       height: auto;
       font-size: 10px;
       color: #666;
       position: absolute;
-      right: 20%;
-      bottom: 25px;
+      right: 140px;
+      bottom: 20px;
       padding: 0; }
       #note-editor div.texture #history label {
         position: absolute;
         top: -10px;
         left: 3px; }
+      #note-editor div.texture #history input[type=range] {
+        width: 200px; }
     #note-editor div.texture #when {
       height: auto;
       font-size: 10px;
       color: #666;
       position: absolute;
-      right: 20%;
+      right: 140px;
       bottom: 3px;
       padding: 0; }
     #note-editor div.texture input[type=text], #note-editor div.texture textarea {
@@ -148,15 +158,15 @@ html, body {
     #note-editor div.texture input[type=text] {
       padding: 10px;
       position: absolute;
-      left: 2%;
-      right: 2%;
+      left: 20px;
+      right: 20px;
       top: 20px; }
     #note-editor div.texture textarea {
       overflow: auto;
       margin-top: 20px;
       padding: 10px;
       position: absolute;
-      left: 2%;
-      right: 2%;
+      left: 20px;
+      right: 20px;
       top: 70px;
       bottom: 70px; }

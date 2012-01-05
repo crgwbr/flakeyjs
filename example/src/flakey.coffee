@@ -1,5 +1,5 @@
 # ==========================================
-# Compiled: Wed Jan 04 2012 16:52:32 GMT-0500 (EST)
+# Compiled: Thu Jan 05 2012 13:49:07 GMT-0500 (EST)
 
 # Contents:
 #   - src/lib/diff_match_patch.js
@@ -12586,7 +12586,7 @@ class Controller
       key_parts = key.split(' ')
       action = key_parts.shift()
       selector = key_parts.join(' ')
-      $(selector).unbind(action, @[fn])
+      $(selector).unbind(action)
   
   html: (htm) ->
     @container_html = htm

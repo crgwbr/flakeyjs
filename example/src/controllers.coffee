@@ -92,7 +92,7 @@ class NoteEditor extends Flakey.controllers.Controller
     @bind_actions()
     
   evolve: () =>
-    version_index = $('#history-slider').val()
+    version_index = parseInt($('#history-slider').val())
     note = models.Note.objects.get(@query_params.id)
     version_id = note.versions[version_index].version_id
     time = new Date(note.versions[version_index].time)

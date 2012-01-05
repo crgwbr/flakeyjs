@@ -13126,7 +13126,7 @@ if (!JSON) {
         key_parts = key.split(' ');
         action = key_parts.shift();
         selector = key_parts.join(' ');
-        _results.push($(selector).unbind(action, this[fn]));
+        _results.push($(selector).unbind(action));
       }
       return _results;
     };
@@ -13479,7 +13479,7 @@ require.define("/controllers.js", function (require, module, exports, __dirname,
 
     NoteEditor.prototype.evolve = function() {
       var note, time, version, version_id, version_index;
-      version_index = $('#history-slider').val();
+      version_index = parseInt($('#history-slider').val());
       note = models.Note.objects.get(this.query_params.id);
       version_id = note.versions[version_index].version_id;
       time = new Date(note.versions[version_index].time);
@@ -13601,7 +13601,7 @@ require.define("/templates/selector.js", function (require, module, exports, __d
           __out.push('</li>\n    ');
         }
       
-        __out.push('\n  </ul>\n</div>');
+        __out.push('\n  </ul>\n  <p id="by-flakey">This is a demo of <a target="_blank" href="http://flakeyjs.crgwbr.com">Flakeyjs</a></p>\n</div>');
       
       }).call(this);
       

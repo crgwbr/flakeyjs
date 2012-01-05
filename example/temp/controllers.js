@@ -117,7 +117,7 @@
 
     NoteEditor.prototype.evolve = function() {
       var note, time, version, version_id, version_index;
-      version_index = $('#history-slider').val();
+      version_index = parseInt($('#history-slider').val());
       note = models.Note.objects.get(this.query_params.id);
       version_id = note.versions[version_index].version_id;
       time = new Date(note.versions[version_index].time);

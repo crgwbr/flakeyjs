@@ -6,4 +6,5 @@
       <li id="<%= note.id %>" class="note <%= if @selected? and (note.id).toString() == @selected.toString() then "selected" else "" %>"><%= note.name %></li>
     <% end %>
   </ul>
+  <p id="by-flakey">This is a demo of <a target="_blank" href="http://flakeyjs.crgwbr.com">Flakeyjs</a></p>
 </div>

@@ -12783,7 +12783,7 @@ if (!JSON) {
         key_parts = key.split(' ');
         action = key_parts.shift();
         selector = key_parts.join(' ');
-        _results.push($(selector).unbind(action, this[fn]));
+        _results.push($(selector).unbind(action));
       }
       return _results;
     };
