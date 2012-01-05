@@ -11,11 +11,13 @@ Using browserify to add requirement support to client side code (like the includ
 
 ### Requirements
 To compile flakey.js from source:
+
 - nodejs
 - npm (normally installed with nodejs)
 - cake (normally installed with nodejs)
 - coffeescript
 
 To compile the sample note taking app (example/*), all of the above plus:
+
 - browserify (npm install browserify)
 - eco (npm install -g eco)
