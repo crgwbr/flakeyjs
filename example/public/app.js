@@ -12308,14 +12308,13 @@ if (!JSON) {
   JSON = Flakey.JSON = JSON;
 
   Flakey.init = function(config) {
-    var key, value, _results;
-    _results = [];
+    var key, value;
     for (key in config) {
       if (!__hasProp.call(config, key)) continue;
       value = config[key];
-      _results.push(Flakey.settings[key] = value);
+      Flakey.settings[key] = value;
     }
-    return _results;
+    return Flakey.models.backend_controller = new Flakey.models.BackendController();
   };
 
   if (window) window.Flakey = Flakey;
@@ -13055,7 +13054,8 @@ if (!JSON) {
 
   Flakey.models = {
     Model: Model,
-    backend_controller: new BackendController()
+    BackendController: BackendController,
+    backend_controller: null
   };
 
   Controller = (function() {
@@ -13325,13 +13325,11 @@ if (!JSON) {
 
 require.define("/models.js", function (require, module, exports, __dirname, __filename) {
     (function() {
-  var $, Flakey, Note,
+  var Flakey, Note,
     __hasProp = Object.prototype.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; };
 
   Flakey = require('./flakey');
-
-  $ = Flakey.$;
 
   Note = (function(_super) {
 
@@ -13462,14 +13460,12 @@ require.define("/controllers.js", function (require, module, exports, __dirname,
 
     NoteEditor.prototype.delete_note = function(event) {
       var id, note;
-      if (this.query_params.id != null) {
-        note = models.Note.objects.get(this.query_params.id);
-        id = note.id;
-        if (confirm("Are you sure you'd like to delete this note?")) {
-          note["delete"]();
-          id = 'new';
-        }
-      }
+      note = models.Note.objects.get(this.query_params.id);
+      if (!(note != null)) return;
+      id = note.id;
+      if (!confirm("Are you sure you'd like to delete this note?")) return;
+      note["delete"]();
+      id = 'new';
       Flakey.util.querystring.update({
         id: id
       });
@@ -13716,7 +13712,8 @@ require.define("/index.js", function (require, module, exports, __dirname, __fil
   $(document).ready(function() {
     var note_app, settings;
     settings = {
-      container: $('body')
+      container: $('body'),
+      base_model_endpoint: '/api'
     };
     Flakey.init(settings);
     Flakey.models.backend_controller.sync('Note');

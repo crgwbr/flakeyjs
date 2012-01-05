@@ -100,14 +100,12 @@
 
     NoteEditor.prototype.delete_note = function(event) {
       var id, note;
-      if (this.query_params.id != null) {
-        note = models.Note.objects.get(this.query_params.id);
-        id = note.id;
-        if (confirm("Are you sure you'd like to delete this note?")) {
-          note["delete"]();
-          id = 'new';
-        }
-      }
+      note = models.Note.objects.get(this.query_params.id);
+      if (!(note != null)) return;
+      id = note.id;
+      if (!confirm("Are you sure you'd like to delete this note?")) return;
+      note["delete"]();
+      id = 'new';
       Flakey.util.querystring.update({
         id: id
       });

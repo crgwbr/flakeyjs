@@ -80,13 +80,17 @@ class NoteEditor extends Flakey.controllers.Controller
     @bind_actions()
     
   delete_note: (event) =>
-    if @query_params.id?
-      note = models.Note.objects.get(@query_params.id)
+    note = models.Note.objects.get(@query_params.id)
+    if not note?
+      return;
       
-      id = note.id
-      if confirm("Are you sure you'd like to delete this note?")
-        note.delete()
-        id = 'new'
+    id = note.id
+    
+    if not confirm("Are you sure you'd like to delete this note?")
+      return 
+      
+    note.delete()
+    id = 'new'
     Flakey.util.querystring.update({id: id})
     @unbind_actions()
     @bind_actions()

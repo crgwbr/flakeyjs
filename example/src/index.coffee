@@ -17,6 +17,7 @@ controllers = require('./controllers')
 $(document).ready () ->
   settings = {
     container: $('body')
+    base_model_endpoint: '/api'
   }
   Flakey.init(settings)
   

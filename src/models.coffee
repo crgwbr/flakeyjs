@@ -446,5 +446,6 @@ class ServerBackend extends Backend
 
 Flakey.models = {
   Model: Model,
-  backend_controller: new BackendController()
+  BackendController: BackendController,
+  backend_controller: null
 }

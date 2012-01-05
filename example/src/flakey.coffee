@@ -1,5 +1,5 @@
 # ==========================================
-# Compiled: Thu Jan 05 2012 13:49:07 GMT-0500 (EST)
+# Compiled: Thu Jan 05 2012 16:37:00 GMT-0500 (EST)
 
 # Contents:
 #   - src/lib/diff_match_patch.js
@@ -11983,6 +11983,9 @@ Flakey.init = (config) ->
   for own key, value of config
     Flakey.settings[key] = value
   
+  # Init this now so the new settings take effect
+  Flakey.models.backend_controller = new Flakey.models.BackendController()
+  
 
 if window
   window.Flakey = Flakey
@@ -12536,7 +12539,8 @@ class ServerBackend extends Backend
 
 Flakey.models = {
   Model: Model,
-  backend_controller: new BackendController()
+  BackendController: BackendController,
+  backend_controller: null
 }
 
 

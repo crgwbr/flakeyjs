@@ -12,7 +12,8 @@
   $(document).ready(function() {
     var note_app, settings;
     settings = {
-      container: $('body')
+      container: $('body'),
+      base_model_endpoint: '/api'
     };
     Flakey.init(settings);
     Flakey.models.backend_controller.sync('Note');

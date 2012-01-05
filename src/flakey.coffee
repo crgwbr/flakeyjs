@@ -25,6 +25,9 @@ Flakey.init = (config) ->
   for own key, value of config
     Flakey.settings[key] = value
   
+  # Init this now so the new settings take effect
+  Flakey.models.backend_controller = new Flakey.models.BackendController()
+  
 
 if window
   window.Flakey = Flakey

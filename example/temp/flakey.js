@@ -11965,14 +11965,13 @@ if (!JSON) {
   JSON = Flakey.JSON = JSON;
 
   Flakey.init = function(config) {
-    var key, value, _results;
-    _results = [];
+    var key, value;
     for (key in config) {
       if (!__hasProp.call(config, key)) continue;
       value = config[key];
-      _results.push(Flakey.settings[key] = value);
+      Flakey.settings[key] = value;
     }
-    return _results;
+    return Flakey.models.backend_controller = new Flakey.models.BackendController();
   };
 
   if (window) window.Flakey = Flakey;
@@ -12712,7 +12711,8 @@ if (!JSON) {
 
   Flakey.models = {
     Model: Model,
-    backend_controller: new BackendController()
+    BackendController: BackendController,
+    backend_controller: null
   };
 
   Controller = (function() {
