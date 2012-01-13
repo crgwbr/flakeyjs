@@ -1,11 +1,9 @@
 (function() {
-  var $, Flakey, controllers, models;
+  var $, Flakey, controllers;
 
   Flakey = require('./flakey');
 
   $ = Flakey.$;
-
-  models = require('./models');
 
   controllers = require('./controllers');
 

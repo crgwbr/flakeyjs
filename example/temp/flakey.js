@@ -12123,6 +12123,10 @@ if (!JSON) {
       this.versions = [];
     }
 
+    Model.prototype["delete"] = function() {
+      return Flakey.models.backend_controller["delete"](this.constructor.model_name, this.id);
+    };
+
     Model.prototype.diff = function(new_obj, old_obj) {
       var key, patches, save, _i, _len, _ref;
       save = {};
@@ -12180,6 +12184,15 @@ if (!JSON) {
       return obj;
     };
 
+    Model.set_fields = function() {
+      var field, _i, _len;
+      for (_i = 0, _len = arguments.length; _i < _len; _i++) {
+        field = arguments[_i];
+        this.fields.push(field);
+      }
+      return true;
+    };
+
     Model.prototype["import"] = function(obj) {
       var key, value, _ref, _results;
       this.versions = obj.versions;
@@ -12213,10 +12226,6 @@ if (!JSON) {
         this.push_version(diff);
         return Flakey.models.backend_controller.save(this.constructor.model_name, this.id, this.versions);
       }
-    };
-
-    Model.prototype["delete"] = function() {
-      return Flakey.models.backend_controller["delete"](this.constructor.model_name, this.id);
     };
 
     return Model;

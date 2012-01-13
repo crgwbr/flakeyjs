@@ -1,5 +1,5 @@
 # ==========================================
-# Compiled: Thu Jan 05 2012 16:37:00 GMT-0500 (EST)
+# Compiled: Wed Jan 11 2012 14:26:07 GMT-0500 (EST)
 
 # Contents:
 #   - src/lib/diff_match_patch.js
@@ -11998,6 +11998,46 @@ if window
 
 
 Flakey.util = {
+  # Deep Compare 2 objects
+  # Return true if they are equal
+  deep_compare: (a, b) ->
+    if typeof a != typeof b
+      return false
+      
+    compare_objects = (a, b) ->
+      for key, value of a
+        if not b[key]?
+          return false
+
+      for key, value of b
+        if not a[key]?
+          return false
+
+      for key, value of a
+        if value
+          switch typeof value
+            when 'object'
+              if not compare_objects(value, b[key])
+                return false
+            else
+              if value != b[key]
+                return false
+        else
+          if b[key]
+            return false
+
+      return true
+      
+    switch typeof a
+      when 'object'
+        if not compare_objects(a, b)
+          return false
+      else
+        if a != b
+          return false
+          
+    return true
+  
   # GUID function from spine.js
   # https://github.com/maccman/spine/blob/master/src/spine.coffee
   guid: () ->
@@ -12101,46 +12141,43 @@ class Model
   @model_name: null
   @fields: ['id']
   
-  @objects: {
-    constructor: @
-    
-    # Query for a single object by id
-    get: (id) ->
-      obj = Flakey.models.backend_controller.get(@constructor.model_name, id)
-      if not obj
-        return undefined
-      m = new @constructor()
-      m.import(obj)
-      return m
-    
-    # Get all objects
-    all: () ->
-      set = []
-      for obj in Flakey.models.backend_controller.all(@constructor.model_name)
-        m = new @constructor()
-        m.import(obj)
-        set.push(m)
-      return set
-  }
-  
   constructor: () ->
     @id = Flakey.util.guid()
     @versions = []
+  
+  # Get all objects
+  @all: () ->
+    set = []
+    for obj in Flakey.models.backend_controller.all(@model_name)
+      m = new @()
+      m.import(obj)
+      set.push(m)
+    return set
+    
+  delete: () ->
+    Flakey.models.backend_controller.delete(@constructor.model_name, @id)
     
   diff: (new_obj, old_obj) ->
     save = {}
-    for key in Object.keys(new_obj)
-      if new_obj[key] != old_obj[key]
-        if new_obj[key].constructor == String
-          old_obj[key] = if old_obj[key]? then old_obj[key].toString() else ''
-        if new_obj[key].constructor == String and old_obj[key].constructor == String and Flakey.settings.diff_text
-          patches = Flakey.diff_patch.patch_make(old_obj[key], new_obj[key])
-          save[key] = {
-            constructor: 'Patch'
-            patch_text: Flakey.diff_patch.patch_toText(patches)
-          }
-        else
-          save[key] = new_obj[key]
+    for key in @constructor.fields
+      if not Flakey.util.deep_compare(new_obj[key], old_obj[key])
+        switch new_obj[key].constructor
+          when Object
+            save[key] = $.extend(true, {}, new_obj[key])
+          when Array
+            save[key] = $.extend(true, [], new_obj[key])
+          when String
+            old_obj[key] = if old_obj[key]? then old_obj[key].toString() else ''
+            if Flakey.settings.diff_text
+              patches = Flakey.diff_patch.patch_make(old_obj[key], new_obj[key])
+              save[key] = {
+                constructor: 'Patch'
+                patch_text: Flakey.diff_patch.patch_toText(patches)
+              }
+            else
+              save[key] = new_obj[key]
+          else
+            save[key] = new_obj[key]
     return save
   
   export: () ->
@@ -12151,16 +12188,46 @@ class Model
     
   evolve: (version_id) ->
     obj = {}
-    for rev in @versions
+    saved = Flakey.models.backend_controller.get(@constructor.model_name, @id)
+    versions = if saved? then saved.versions else {}
+    
+    for rev in versions
       for own key, value of rev.fields
-        if value.constructor == 'Patch'
-          patches = Flakey.diff_patch.patch_fromText(value.patch_text)
-          obj[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0]
-        else
-          obj[key] = value
+        switch value.constructor
+          when 'Patch'
+            patches = Flakey.diff_patch.patch_fromText(value.patch_text)
+            obj[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0]
+          when Object
+            obj[key] = $.extend(true, {}, value)
+          when Array
+            obj[key] = $.extend(true, [], value)
+          else
+            obj[key] = value
       if version_id != undefined and version_id == rev.version_id
         return obj
     return obj
+    
+  # Query for a set of objects by a query object
+  @find: (query) ->
+    ar = Flakey.models.backend_controller.find(@model_name, query)
+    if not ar.length
+      return []
+    
+    set = []
+    for item in ar
+      m = new @()
+      m.import(item)
+      set.push(m)
+    return set
+    
+  # Query for a single object by id
+  @get: (id) ->
+    obj = Flakey.models.backend_controller.get(@model_name, id)
+    if not obj
+      return undefined
+    m = new @()
+    m.import(obj)
+    return m
     
   import: (obj) ->
     @versions = obj.versions
@@ -12170,11 +12237,13 @@ class Model
     
   push_version: (diff) ->
     version_id = Flakey.util.guid()
-    @versions.push({
+    version = {
       version_id: version_id,
       time: +(new Date()),
-      fields: diff
-    })
+      fields: $.extend(true, {}, diff)
+    }
+    Object.freeze(version)
+    @versions.push(version)
     
   save: () ->
     new_obj = @export()
@@ -12184,9 +12253,6 @@ class Model
     if Object.keys(diff).length > 0
       @push_version(diff)
       Flakey.models.backend_controller.save(@constructor.model_name, @id, @versions)
-    
-  delete: () ->
-    Flakey.models.backend_controller.delete(@constructor.model_name, @id)
 
 
 class BackendController

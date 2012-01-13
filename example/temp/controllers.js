@@ -1,5 +1,5 @@
 (function() {
-  var $, Flakey, MainController, MainStack, NoteEditor, NoteSelector, models,
+  var $, Flakey, MainController, MainStack, Note, NoteEditor, NoteSelector,
     __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
     __hasProp = Object.prototype.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; };
@@ -8,7 +8,7 @@
 
   $ = Flakey.$;
 
-  models = require('./models');
+  Note = require('./models/Note');
 
   NoteSelector = (function(_super) {
 
@@ -28,7 +28,7 @@
       var context;
       context = {
         selected: this.query_params.id,
-        notes: models.Note.objects.all()
+        notes: Note.objects.all()
       };
       return this.html(this.tmpl.render(context));
     };
@@ -69,9 +69,9 @@
     NoteEditor.prototype.render = function() {
       var context;
       context = {};
-      context.note = models.Note.objects.get(this.query_params.id);
+      context.note = Note.objects.get(this.query_params.id);
       if (context.note === void 0 || this.query_params.id === 'new') {
-        context.note = new models.Note();
+        context.note = new Note();
       }
       this.html(this.tmpl.render(context));
       this.unbind_actions();
@@ -80,9 +80,9 @@
 
     NoteEditor.prototype.save_note = function(event) {
       var note;
-      note = models.Note.objects.get(this.query_params.id);
+      note = Note.objects.get(this.query_params.id);
       if (note === void 0) {
-        note = new models.Note();
+        note = new Note();
         note.id = $('#note-id').val();
       }
       note.name = $('#name').val();
@@ -100,7 +100,7 @@
 
     NoteEditor.prototype.delete_note = function(event) {
       var id, note;
-      note = models.Note.objects.get(this.query_params.id);
+      note = Note.objects.get(this.query_params.id);
       if (!(note != null)) return;
       id = note.id;
       if (!confirm("Are you sure you'd like to delete this note?")) return;
@@ -116,7 +116,7 @@
     NoteEditor.prototype.evolve = function() {
       var note, time, version, version_id, version_index;
       version_index = parseInt($('#history-slider').val());
-      note = models.Note.objects.get(this.query_params.id);
+      note = Note.objects.get(this.query_params.id);
       version_id = note.versions[version_index].version_id;
       time = new Date(note.versions[version_index].time);
       version = note.evolve(version_id);

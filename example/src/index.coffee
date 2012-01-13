@@ -10,7 +10,6 @@
 Flakey = require('./flakey') # This path will change depending on where your copy of flakey.js is.
 $ = Flakey.$
 
-models = require('./models')
 controllers = require('./controllers')
 
 

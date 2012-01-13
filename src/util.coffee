@@ -5,6 +5,50 @@
 
 
 Flakey.util = {
+  # Run function asynchronously
+  async: (fn) ->
+    setTimeout(fn, 0)
+    
+  # Deep Compare 2 objects
+  # Return true if they are equal
+  deep_compare: (a, b) ->
+    if typeof a != typeof b
+      return false
+      
+    compare_objects = (a, b) ->
+      for key, value of a
+        if not b[key]?
+          return false
+
+      for key, value of b
+        if not a[key]?
+          return false
+
+      for key, value of a
+        if value
+          switch typeof value
+            when 'object'
+              if not compare_objects(value, b[key])
+                return false
+            else
+              if value != b[key]
+                return false
+        else
+          if b[key]
+            return false
+
+      return true
+      
+    switch typeof a
+      when 'object'
+        if not compare_objects(a, b)
+          return false
+      else
+        if a != b
+          return false
+          
+    return true
+  
   # GUID function from spine.js
   # https://github.com/maccman/spine/blob/master/src/spine.coffee
   guid: () ->

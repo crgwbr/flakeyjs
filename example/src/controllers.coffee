@@ -10,7 +10,7 @@
 Flakey = require('./flakey') # This path will change depending on where your copy of flakey.js is.
 $ = Flakey.$
 
-models = require('./models')
+Note = require('./models/Note')
 
 
 class NoteSelector extends Flakey.controllers.Controller
@@ -27,7 +27,7 @@ class NoteSelector extends Flakey.controllers.Controller
   render: () ->
     context = {
       selected: @query_params.id,
-      notes: models.Note.objects.all()
+      notes: Note.all()
     }
     @html @tmpl.render(context)
     
@@ -55,20 +55,20 @@ class NoteEditor extends Flakey.controllers.Controller
   render: () ->
     context = {}
 
-    context.note = models.Note.objects.get(@query_params.id)
+    context.note = Note.get(@query_params.id)
       
     if context.note == undefined or @query_params.id == 'new'
-      context.note = new models.Note()
+      context.note = new Note()
     
     @html @tmpl.render(context)
     @unbind_actions()
     @bind_actions()
     
   save_note: (event) =>
-    note = models.Note.objects.get(@query_params.id)
+    note = Note.get(@query_params.id)
     
     if note == undefined
-      note = new models.Note()
+      note = new Note()
       note.id = $('#note-id').val()
     
     note.name = $('#name').val()
@@ -80,7 +80,7 @@ class NoteEditor extends Flakey.controllers.Controller
     @bind_actions()
     
   delete_note: (event) =>
-    note = models.Note.objects.get(@query_params.id)
+    note = Note.get(@query_params.id)
     if not note?
       return;
       
@@ -97,7 +97,7 @@ class NoteEditor extends Flakey.controllers.Controller
     
   evolve: () =>
     version_index = parseInt($('#history-slider').val())
-    note = models.Note.objects.get(@query_params.id)
+    note = Note.get(@query_params.id)
     version_id = note.versions[version_index].version_id
     time = new Date(note.versions[version_index].time)
     

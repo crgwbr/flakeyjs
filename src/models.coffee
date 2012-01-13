@@ -8,46 +8,43 @@ class Model
   @model_name: null
   @fields: ['id']
   
-  @objects: {
-    constructor: @
-    
-    # Query for a single object by id
-    get: (id) ->
-      obj = Flakey.models.backend_controller.get(@constructor.model_name, id)
-      if not obj
-        return undefined
-      m = new @constructor()
-      m.import(obj)
-      return m
-    
-    # Get all objects
-    all: () ->
-      set = []
-      for obj in Flakey.models.backend_controller.all(@constructor.model_name)
-        m = new @constructor()
-        m.import(obj)
-        set.push(m)
-      return set
-  }
-  
   constructor: () ->
     @id = Flakey.util.guid()
     @versions = []
+  
+  # Get all objects
+  @all: () ->
+    set = []
+    for obj in Flakey.models.backend_controller.all(@model_name)
+      m = new @()
+      m.import(obj)
+      set.push(m)
+    return set
+    
+  delete: () ->
+    Flakey.models.backend_controller.delete(@constructor.model_name, @id)
     
   diff: (new_obj, old_obj) ->
     save = {}
-    for key in Object.keys(new_obj)
-      if new_obj[key] != old_obj[key]
-        if new_obj[key].constructor == String
-          old_obj[key] = if old_obj[key]? then old_obj[key].toString() else ''
-        if new_obj[key].constructor == String and old_obj[key].constructor == String and Flakey.settings.diff_text
-          patches = Flakey.diff_patch.patch_make(old_obj[key], new_obj[key])
-          save[key] = {
-            constructor: 'Patch'
-            patch_text: Flakey.diff_patch.patch_toText(patches)
-          }
-        else
-          save[key] = new_obj[key]
+    for key in @constructor.fields
+      if not Flakey.util.deep_compare(new_obj[key], old_obj[key])
+        switch new_obj[key].constructor
+          when Object
+            save[key] = $.extend(true, {}, new_obj[key])
+          when Array
+            save[key] = $.extend(true, [], new_obj[key])
+          when String
+            old_obj[key] = if old_obj[key]? then old_obj[key].toString() else ''
+            if Flakey.settings.diff_text
+              patches = Flakey.diff_patch.patch_make(old_obj[key], new_obj[key])
+              save[key] = {
+                constructor: 'Patch'
+                patch_text: Flakey.diff_patch.patch_toText(patches)
+              }
+            else
+              save[key] = new_obj[key]
+          else
+            save[key] = new_obj[key]
     return save
   
   export: () ->
@@ -58,16 +55,46 @@ class Model
     
   evolve: (version_id) ->
     obj = {}
-    for rev in @versions
+    saved = Flakey.models.backend_controller.get(@constructor.model_name, @id)
+    versions = if saved? then saved.versions else {}
+    
+    for rev in versions
       for own key, value of rev.fields
-        if value.constructor == 'Patch'
-          patches = Flakey.diff_patch.patch_fromText(value.patch_text)
-          obj[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0]
-        else
-          obj[key] = value
+        switch value.constructor
+          when 'Patch'
+            patches = Flakey.diff_patch.patch_fromText(value.patch_text)
+            obj[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0]
+          when Object
+            obj[key] = $.extend(true, {}, value)
+          when Array
+            obj[key] = $.extend(true, [], value)
+          else
+            obj[key] = value
       if version_id != undefined and version_id == rev.version_id
         return obj
     return obj
+    
+  # Query for a set of objects by a query object
+  @find: (query) ->
+    ar = Flakey.models.backend_controller.find(@model_name, query)
+    if not ar.length
+      return []
+    
+    set = []
+    for item in ar
+      m = new @()
+      m.import(item)
+      set.push(m)
+    return set
+    
+  # Query for a single object by id
+  @get: (id) ->
+    obj = Flakey.models.backend_controller.get(@model_name, id)
+    if not obj
+      return undefined
+    m = new @()
+    m.import(obj)
+    return m
     
   import: (obj) ->
     @versions = obj.versions
@@ -77,11 +104,13 @@ class Model
     
   push_version: (diff) ->
     version_id = Flakey.util.guid()
-    @versions.push({
+    version = {
       version_id: version_id,
       time: +(new Date()),
-      fields: diff
-    })
+      fields: $.extend(true, {}, diff)
+    }
+    Object.freeze(version)
+    @versions.push(version)
     
   save: () ->
     new_obj = @export()
@@ -90,10 +119,9 @@ class Model
     # Don't save empty versions
     if Object.keys(diff).length > 0
       @push_version(diff)
-      Flakey.models.backend_controller.save(@constructor.model_name, @id, @versions)
-    
-  delete: () ->
-    Flakey.models.backend_controller.delete(@constructor.model_name, @id)
+      # Run this asynchronously so that server traffic doesn't lock the UI
+      Flakey.util.async () =>
+        Flakey.models.backend_controller.save(@constructor.model_name, @id, @versions)
 
 
 class BackendController
@@ -354,6 +382,9 @@ class LocalBackend extends Backend
 
 # Server storage backend
 class ServerBackend extends Backend
+  constructor: () ->
+    @server_cache = {}
+  
   build_endpoint_url: (name, id, params) ->
     url = "#{Flakey.settings.base_model_endpoint}/#{name}"
     if id? then url += "/#{id}"
@@ -376,6 +407,8 @@ class ServerBackend extends Backend
         store = data
       type: 'GET'
     })
+
+    (@save_to_cache(obj) for obj in store)
     return store
 
   # Get an object from the given store by its id
@@ -392,10 +425,25 @@ class ServerBackend extends Backend
         obj = data
       type: 'GET'
     })
+
+    @save_to_cache(obj)
     return obj
 
+  # Retreive Object from server cache
+  get_from_cache: (id) ->
+    return @server_cache[id]
+
   # Save an object to the store  
-  save: (name, id, versions) ->
+  save: (name, id, versions, force_write) ->
+    proposed_obj = {id: id, versions: versions}
+    cached_obj = @get_from_cache(id)
+    
+    # Compare cached object to proposed save object
+    # Only actually save if they are different, or if force_write flag is true
+    if Flakey.util.deep_compare(proposed_obj, cached_obj) and force_write != true
+      return true
+    
+    # Write objects to server
     status = false
     $.ajax({
       async: false
@@ -410,6 +458,10 @@ class ServerBackend extends Backend
       type: 'POST'
     })
     return status
+
+  # Save object to server_cache
+  save_to_cache: (obj) ->
+    @server_cache[obj.id] = $.extend(true, {}, obj)
 
   # Delete an item by id
   delete: (name, id) ->

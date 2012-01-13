@@ -12466,6 +12466,10 @@ if (!JSON) {
       this.versions = [];
     }
 
+    Model.prototype["delete"] = function() {
+      return Flakey.models.backend_controller["delete"](this.constructor.model_name, this.id);
+    };
+
     Model.prototype.diff = function(new_obj, old_obj) {
       var key, patches, save, _i, _len, _ref;
       save = {};
@@ -12523,6 +12527,15 @@ if (!JSON) {
       return obj;
     };
 
+    Model.set_fields = function() {
+      var field, _i, _len;
+      for (_i = 0, _len = arguments.length; _i < _len; _i++) {
+        field = arguments[_i];
+        this.fields.push(field);
+      }
+      return true;
+    };
+
     Model.prototype["import"] = function(obj) {
       var key, value, _ref, _results;
       this.versions = obj.versions;
@@ -12556,10 +12569,6 @@ if (!JSON) {
         this.push_version(diff);
         return Flakey.models.backend_controller.save(this.constructor.model_name, this.id, this.versions);
       }
-    };
-
-    Model.prototype["delete"] = function() {
-      return Flakey.models.backend_controller["delete"](this.constructor.model_name, this.id);
     };
 
     return Model;
@@ -13323,43 +13332,9 @@ if (!JSON) {
 
 });
 
-require.define("/models.js", function (require, module, exports, __dirname, __filename) {
-    (function() {
-  var Flakey, Note,
-    __hasProp = Object.prototype.hasOwnProperty,
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; };
-
-  Flakey = require('./flakey');
-
-  Note = (function(_super) {
-
-    __extends(Note, _super);
-
-    function Note() {
-      Note.__super__.constructor.apply(this, arguments);
-    }
-
-    Note.model_name = 'Note';
-
-    Note.fields = ['id', 'name', 'content'];
-
-    Note.objects.constructor = Note;
-
-    return Note;
-
-  })(Flakey.models.Model);
-
-  module.exports = {
-    Note: Note
-  };
-
-}).call(this);
-
-});
-
 require.define("/controllers.js", function (require, module, exports, __dirname, __filename) {
     (function() {
-  var $, Flakey, MainController, MainStack, NoteEditor, NoteSelector, models,
+  var $, Flakey, MainController, MainStack, Note, NoteEditor, NoteSelector,
     __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
     __hasProp = Object.prototype.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; };
@@ -13368,7 +13343,7 @@ require.define("/controllers.js", function (require, module, exports, __dirname,
 
   $ = Flakey.$;
 
-  models = require('./models');
+  Note = require('./models/Note');
 
   NoteSelector = (function(_super) {
 
@@ -13388,7 +13363,7 @@ require.define("/controllers.js", function (require, module, exports, __dirname,
       var context;
       context = {
         selected: this.query_params.id,
-        notes: models.Note.objects.all()
+        notes: Note.objects.all()
       };
       return this.html(this.tmpl.render(context));
     };
@@ -13429,9 +13404,9 @@ require.define("/controllers.js", function (require, module, exports, __dirname,
     NoteEditor.prototype.render = function() {
       var context;
       context = {};
-      context.note = models.Note.objects.get(this.query_params.id);
+      context.note = Note.objects.get(this.query_params.id);
       if (context.note === void 0 || this.query_params.id === 'new') {
-        context.note = new models.Note();
+        context.note = new Note();
       }
       this.html(this.tmpl.render(context));
       this.unbind_actions();
@@ -13440,9 +13415,9 @@ require.define("/controllers.js", function (require, module, exports, __dirname,
 
     NoteEditor.prototype.save_note = function(event) {
       var note;
-      note = models.Note.objects.get(this.query_params.id);
+      note = Note.objects.get(this.query_params.id);
       if (note === void 0) {
-        note = new models.Note();
+        note = new Note();
         note.id = $('#note-id').val();
       }
       note.name = $('#name').val();
@@ -13460,7 +13435,7 @@ require.define("/controllers.js", function (require, module, exports, __dirname,
 
     NoteEditor.prototype.delete_note = function(event) {
       var id, note;
-      note = models.Note.objects.get(this.query_params.id);
+      note = Note.objects.get(this.query_params.id);
       if (!(note != null)) return;
       id = note.id;
       if (!confirm("Are you sure you'd like to delete this note?")) return;
@@ -13476,7 +13451,7 @@ require.define("/controllers.js", function (require, module, exports, __dirname,
     NoteEditor.prototype.evolve = function() {
       var note, time, version, version_id, version_index;
       version_index = parseInt($('#history-slider').val());
-      note = models.Note.objects.get(this.query_params.id);
+      note = Note.objects.get(this.query_params.id);
       version_id = note.versions[version_index].version_id;
       time = new Date(note.versions[version_index].time);
       version = note.evolve(version_id);
@@ -13530,6 +13505,38 @@ require.define("/controllers.js", function (require, module, exports, __dirname,
   module.exports = {
     MainStack: MainStack
   };
+
+}).call(this);
+
+});
+
+require.define("/models/Note.js", function (require, module, exports, __dirname, __filename) {
+    (function() {
+  var Flakey, Note,
+    __hasProp = Object.prototype.hasOwnProperty,
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; };
+
+  Flakey = require('../flakey');
+
+  Note = (function(_super) {
+
+    __extends(Note, _super);
+
+    function Note() {
+      Note.__super__.constructor.apply(this, arguments);
+    }
+
+    Note.model_name = 'Note';
+
+    Note.fields = ['id', 'name', 'content'];
+
+    Note.objects.constructor = Note;
+
+    return Note;
+
+  })(Flakey.models.Model);
+
+  module.exports = Note;
 
 }).call(this);
 
@@ -13699,13 +13706,11 @@ require.define("/templates/editor.js", function (require, module, exports, __dir
 
 require.define("/index.js", function (require, module, exports, __dirname, __filename) {
     (function() {
-  var $, Flakey, controllers, models;
+  var $, Flakey, controllers;
 
   Flakey = require('./flakey');
 
   $ = Flakey.$;
-
-  models = require('./models');
 
   controllers = require('./controllers');
 
