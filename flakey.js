@@ -12282,7 +12282,7 @@ if (!JSON) {
       return this.versions.push(version);
     };
 
-    Model.prototype.save = function() {
+    Model.prototype.save = function(callback) {
       var diff, new_obj, old_obj,
         _this = this;
       new_obj = this["export"]();
@@ -12290,10 +12290,14 @@ if (!JSON) {
       diff = this.diff(new_obj, old_obj);
       if (Object.keys(diff).length > 0) {
         this.push_version(diff);
-        return Flakey.util.async(function() {
-          return Flakey.models.backend_controller.save(_this.constructor.model_name, _this.id, _this.versions);
+        Flakey.util.async(function() {
+          Flakey.models.backend_controller.save(_this.constructor.model_name, _this.id, _this.versions);
+          if (callback != null) return callback();
         });
+      } else if (callback != null) {
+        callback();
       }
+      return true;
     };
 
     return Model;
@@ -12392,16 +12396,18 @@ if (!JSON) {
         log = backend.pending_log;
         for (_i = 0, _len = log.length; _i < _len; _i++) {
           msg = log[_i];
-          action = msg.split(this.delim);
-          fn = Flakey.models.backend_controller.backends[name].interface[action[0]];
-          params = JSON.parse(action[1]);
-          bends = {};
-          bends[name] = backend;
-          params.push(bends);
-          if (fn.apply(Flakey.models.backend_controller.backends[name].interface, params)) {
-            backend.pending_log.shift();
-          } else {
-            break;
+          if (msg != null) {
+            action = msg.split(this.delim);
+            fn = Flakey.models.backend_controller.backends[name].interface[action[0]];
+            params = JSON.parse(action[1]);
+            bends = {};
+            bends[name] = backend;
+            params.push(bends);
+            if (fn.apply(Flakey.models.backend_controller.backends[name].interface, params)) {
+              backend.pending_log.shift();
+            } else {
+              break;
+            }
           }
         }
       }

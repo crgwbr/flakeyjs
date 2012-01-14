@@ -112,7 +112,7 @@ class Model
     Object.freeze(version)
     @versions.push(version)
     
-  save: () ->
+  save: (callback) ->
     new_obj = @export()
     old_obj = @evolve()
     diff = @diff(new_obj, old_obj)
@@ -122,6 +122,10 @@ class Model
       # Run this asynchronously so that server traffic doesn't lock the UI
       Flakey.util.async () =>
         Flakey.models.backend_controller.save(@constructor.model_name, @id, @versions)
+        if callback? then callback()
+    else if callback?
+      callback()
+    return true
 
 
 class BackendController
@@ -193,16 +197,17 @@ class BackendController
     for own name, backend of @backends
       log = backend.pending_log
       for msg in log
-        action = msg.split(@delim)
-        fn = Flakey.models.backend_controller.backends[name].interface[action[0]]
-        params = JSON.parse(action[1])
-        bends = {}
-        bends[name] = backend
-        params.push(bends)
-        if fn.apply(Flakey.models.backend_controller.backends[name].interface, params)
-          backend.pending_log.shift()
-        else
-          break;
+        if msg?
+          action = msg.split(@delim)
+          fn = Flakey.models.backend_controller.backends[name].interface[action[0]]
+          params = JSON.parse(action[1])
+          bends = {}
+          bends[name] = backend
+          params.push(bends)
+          if fn.apply(Flakey.models.backend_controller.backends[name].interface, params)
+            backend.pending_log.shift()
+          else
+            break;
     @commit_logs()
           
   commit_logs: (backends = @backends) ->
