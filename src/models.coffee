@@ -8,9 +8,12 @@ class Model
   @model_name: null
   @fields: ['id']
   
-  constructor: () ->
+  constructor: (init_values) ->
     @id = Flakey.util.guid()
     @versions = []
+    
+    for own key, value of init_values
+      @[key] = value
   
   # Get all objects
   @all: () ->
@@ -101,6 +104,9 @@ class Model
     @id = obj.id
     for own key, value of @evolve()
       @[key] = value
+      
+  pop_version: () ->
+    @versions.pop()
     
   push_version: (diff) ->
     version_id = Flakey.util.guid()
@@ -125,6 +131,9 @@ class Model
         if callback? then callback()
     else if callback?
       callback()
+    # Trigger the saved event
+    event_key = "model_#{ @constructor.model_name.toLowerCase() }_updated"
+    Flakey.events.trigger(event_key, undefined, {model: @})
     return true
 
 

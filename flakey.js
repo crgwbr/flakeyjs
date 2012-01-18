@@ -1,4 +1,5 @@
 (function() {
+
   /**
  * Diff Match and Patch
  *
@@ -2186,6 +2187,7 @@ this['diff_match_patch'] = diff_match_patch;
 this['DIFF_DELETE'] = DIFF_DELETE;
 this['DIFF_INSERT'] = DIFF_INSERT;
 this['DIFF_EQUAL'] = DIFF_EQUAL;
+
   /*!
  * jQuery JavaScript Library v1.7.1
  * http://jquery.com/
@@ -11452,6 +11454,7 @@ if ( typeof define === "function" && define.amd && define.amd.jQuery ) {
 
 
 })( window );;
+
   /*
     http://www.JSON.org/json2.js
     2011-10-19
@@ -11939,11 +11942,9 @@ if (!JSON) {
         };
     }
 }());;
-  var $, Backend, BackendController, Controller, Events, Flakey, JSON, LocalBackend, MemoryBackend, Model, ServerBackend, Stack, Template, get_template,
-    __hasProp = Object.prototype.hasOwnProperty,
-    __indexOf = Array.prototype.indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; },
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; },
-    __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
+
+  var $, Backend, BackendController, Controller, Events, Flakey, JSON, LocalBackend, MemoryBackend, Model, ServerBackend, Stack, Template, get_template;
+  var __hasProp = Object.prototype.hasOwnProperty, __indexOf = Array.prototype.indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (__hasProp.call(this, i) && this[i] === item) return i; } return -1; }, __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; }, __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
 
   Flakey = {
     diff_patch: new diff_match_patch(),
@@ -12104,16 +12105,17 @@ if (!JSON) {
       return this.events[namespace][event];
     };
 
-    Events.prototype.trigger = function(event, namespace) {
+    Events.prototype.trigger = function(event, namespace, data) {
       var fn, output, _i, _len, _ref;
       if (namespace == null) namespace = 'flakey';
+      if (data == null) data = {};
       if (this.events[namespace] === void 0) this.events[namespace] = {};
       if (this.events[namespace][event] === void 0) return;
       output = [];
       _ref = this.events[namespace][event];
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         fn = _ref[_i];
-        output.push(fn());
+        output.push(fn(event, namespace, data));
       }
       return output;
     };
@@ -12135,9 +12137,15 @@ if (!JSON) {
 
     Model.fields = ['id'];
 
-    function Model() {
+    function Model(init_values) {
+      var key, value;
       this.id = Flakey.util.guid();
       this.versions = [];
+      for (key in init_values) {
+        if (!__hasProp.call(init_values, key)) continue;
+        value = init_values[key];
+        this[key] = value;
+      }
     }
 
     Model.all = function() {
@@ -12270,6 +12278,10 @@ if (!JSON) {
       return _results;
     };
 
+    Model.prototype.pop_version = function() {
+      return this.versions.pop();
+    };
+
     Model.prototype.push_version = function(diff) {
       var version, version_id;
       version_id = Flakey.util.guid();
@@ -12283,8 +12295,8 @@ if (!JSON) {
     };
 
     Model.prototype.save = function(callback) {
-      var diff, new_obj, old_obj,
-        _this = this;
+      var diff, event_key, new_obj, old_obj;
+      var _this = this;
       new_obj = this["export"]();
       old_obj = this.evolve();
       diff = this.diff(new_obj, old_obj);
@@ -12297,6 +12309,10 @@ if (!JSON) {
       } else if (callback != null) {
         callback();
       }
+      event_key = "model_" + (this.constructor.model_name.toLowerCase()) + "_updated";
+      Flakey.events.trigger(event_key, void 0, {
+        model: this
+      });
       return true;
     };
 
@@ -12620,9 +12636,9 @@ if (!JSON) {
 
   })();
 
-  MemoryBackend = (function(_super) {
+  MemoryBackend = (function() {
 
-    __extends(MemoryBackend, _super);
+    __extends(MemoryBackend, Backend);
 
     function MemoryBackend() {
       if (!window.memcache) window.memcache = {};
@@ -12639,11 +12655,11 @@ if (!JSON) {
 
     return MemoryBackend;
 
-  })(Backend);
+  })();
 
-  LocalBackend = (function(_super) {
+  LocalBackend = (function() {
 
-    __extends(LocalBackend, _super);
+    __extends(LocalBackend, Backend);
 
     function LocalBackend() {
       this.prefix = 'flakey-';
@@ -12665,11 +12681,11 @@ if (!JSON) {
 
     return LocalBackend;
 
-  })(Backend);
+  })();
 
-  ServerBackend = (function(_super) {
+  ServerBackend = (function() {
 
-    __extends(ServerBackend, _super);
+    __extends(ServerBackend, Backend);
 
     function ServerBackend() {
       this.server_cache = {};
@@ -12811,7 +12827,7 @@ if (!JSON) {
 
     return ServerBackend;
 
-  })(Backend);
+  })();
 
   Flakey.models = {
     Model: Model,

@@ -1,5 +1,5 @@
 # ==========================================
-# Compiled: Fri Jan 13 2012 17:07:59 GMT-0500 (EST)
+# Compiled: Tue Jan 17 2012 22:30:01 GMT-0500 (EST)
 
 # Contents:
 #   - src/lib/diff_match_patch.js
@@ -12119,14 +12119,14 @@ class Events
     @events[namespace][event].push(fn)
     return @events[namespace][event]
     
-  trigger: (event, namespace = 'flakey') ->
+  trigger: (event, namespace = 'flakey', data = {}) ->
     if @events[namespace] == undefined
       @events[namespace] = {}
     if @events[namespace][event] == undefined
       return
     output = []
     for fn in @events[namespace][event]
-      output.push(fn())
+      output.push(fn(event, namespace, data))
     return output
     
   clear: (namespace = 'flakey') ->
@@ -12145,9 +12145,12 @@ class Model
   @model_name: null
   @fields: ['id']
   
-  constructor: () ->
+  constructor: (init_values) ->
     @id = Flakey.util.guid()
     @versions = []
+    
+    for own key, value of init_values
+      @[key] = value
   
   # Get all objects
   @all: () ->
@@ -12238,6 +12241,9 @@ class Model
     @id = obj.id
     for own key, value of @evolve()
       @[key] = value
+      
+  pop_version: () ->
+    @versions.pop()
     
   push_version: (diff) ->
     version_id = Flakey.util.guid()
@@ -12262,6 +12268,9 @@ class Model
         if callback? then callback()
     else if callback?
       callback()
+    # Trigger the saved event
+    event_key = "model_#{ @constructor.model_name.toLowerCase() }_updated"
+    Flakey.events.trigger(event_key, undefined, {model: @})
     return true
 
 

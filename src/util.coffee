@@ -126,14 +126,14 @@ class Events
     @events[namespace][event].push(fn)
     return @events[namespace][event]
     
-  trigger: (event, namespace = 'flakey') ->
+  trigger: (event, namespace = 'flakey', data = {}) ->
     if @events[namespace] == undefined
       @events[namespace] = {}
     if @events[namespace][event] == undefined
       return
     output = []
     for fn in @events[namespace][event]
-      output.push(fn())
+      output.push(fn(event, namespace, data))
     return output
     
   clear: (namespace = 'flakey') ->
