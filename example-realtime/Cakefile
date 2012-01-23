@@ -1,0 +1,27 @@
+fs     = require 'fs'
+{exec} = require 'child_process'
+browserify = require 'browserify'
+
+
+task 'build_app', 'Build chat application', ->
+  exec 'rm -rf client/temp/*', (err, stdout, stderr) ->
+    throw err if err
+    console.log stdout + stderr
+    exec 'mkdir -p client/temp/templates/', (err, stdout, stderr) ->
+      throw err if err
+      console.log stdout + stderr
+      console.log 'Compiling Templates...'
+      exec 'eco -o client/temp/templates/ client/src/templates/', (err, stdout, stderr) ->
+        throw err if err
+        console.log stdout + stderr
+        console.log 'Compiling Coffeescript...'
+        exec 'coffee -c -o client/temp/ client/src/', (err, stdout, stderr) ->
+          throw err if err
+          console.log stdout + stderr
+          console.log 'Tracing Dependancies...'
+          b = browserify()
+          b.addEntry('./client/temp/index.js')
+          file = b.bundle()
+          fs.writeFile 'client/public/app.js', file, 'utf8', (err) ->
+            throw err if err
+            

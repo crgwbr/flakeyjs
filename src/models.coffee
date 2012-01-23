@@ -26,6 +26,8 @@ class Model
     
   delete: () ->
     Flakey.models.backend_controller.delete(@constructor.model_name, @id)
+    event_key = "model_#{ @constructor.model_name.toLowerCase() }_updated"
+    Flakey.events.trigger(event_key, undefined)
     
   diff: (new_obj, old_obj) ->
     save = {}
@@ -129,11 +131,11 @@ class Model
       Flakey.util.async () =>
         Flakey.models.backend_controller.save(@constructor.model_name, @id, @versions)
         if callback? then callback()
+        # Trigger the saved event
+        event_key = "model_#{ @constructor.model_name.toLowerCase() }_updated"
+        Flakey.events.trigger(event_key, undefined)
     else if callback?
       callback()
-    # Trigger the saved event
-    event_key = "model_#{ @constructor.model_name.toLowerCase() }_updated"
-    Flakey.events.trigger(event_key, undefined, {model: @})
     return true
 
 
@@ -146,18 +148,27 @@ class BackendController
         pending_log: []
         interface: new MemoryBackend()
       }
-      local: {
+    }
+    
+    if Flakey.settings.enabled_local_backend
+      @backends['local'] = {
         log_key: 'flakey-local-log'
         pending_log: []
         interface: new LocalBackend()
       }
-    }
     
     if Flakey.settings.base_model_endpoint
       @backends['server'] = {
         log_key: 'flakey-server-log'
         pending_log: []
         interface: new ServerBackend()
+      }
+      
+    if Flakey.settings.socketio_server
+      @backends['socketio'] = {
+        log_key: 'flakey-socketio-log'
+        pending_log: []
+        interface: new SocketIOBackend()
       }
     
     @read = Flakey.settings.read_backend || 'memory' # Backend to use for read operations
@@ -247,6 +258,10 @@ class BackendController
     
     for own bname, backend of backends
       backend.interface._write(name, output)
+      
+    # Trigger the saved event
+    event_key = "model_#{ name.toLowerCase() }_updated"
+    Flakey.events.trigger(event_key, undefined)
           
   merge_version_lists: (a, b) ->
     temp = {}
@@ -422,7 +437,7 @@ class ServerBackend extends Backend
       type: 'GET'
     })
 
-    (@save_to_cache(obj) for obj in store)
+    (@save_to_cache(name, obj.id, obj.versions) for obj in store)
     return store
 
   # Get an object from the given store by its id
@@ -440,17 +455,20 @@ class ServerBackend extends Backend
       type: 'GET'
     })
 
-    @save_to_cache(obj)
+    @save_to_cache(name, obj.id, obj.versions)
     return obj
 
   # Retreive Object from server cache
-  get_from_cache: (id) ->
-    return @server_cache[id]
+  get_from_cache: (name, id) ->
+    if @server_cache[name]
+      if @server_cache[name][id]
+        return @server_cache[name][id]
+    return undefined
 
   # Save an object to the store  
   save: (name, id, versions, force_write) ->
     proposed_obj = {id: id, versions: versions}
-    cached_obj = @get_from_cache(id)
+    cached_obj = @get_from_cache(name, id)
     
     # Compare cached object to proposed save object
     # Only actually save if they are different, or if force_write flag is true
@@ -474,8 +492,9 @@ class ServerBackend extends Backend
     return status
 
   # Save object to server_cache
-  save_to_cache: (obj) ->
-    @server_cache[obj.id] = $.extend(true, {}, obj)
+  save_to_cache: (name, id, versions) ->
+    @server_cache[name] = @server_cache[name] || {}
+    @server_cache[name][id] = $.extend(true, {}, {id: id, versions: versions})
 
   # Delete an item by id
   delete: (name, id) ->
@@ -499,6 +518,85 @@ class ServerBackend extends Backend
   _query_by_id: (name, id) ->
     throw new TypeError("_query_by_id not supported on server backend")
     
+  _read: (name) ->
+    return @all(name)
+
+  _write: (name, store) ->
+    status = true
+    for item in store
+      if not @save(name, item.id, item.versions)
+        status = false
+    return status
+    
+
+# Server storage backend
+class SocketIOBackend extends Backend
+  constructor: () ->
+    @status = true
+    @socket = window.socket = io.connect(Flakey.settings.socketio_server)
+    @server_cache = {}
+    
+    @socket.on 'sync', (set) =>
+      names = []
+      for obj in set
+        if obj.name not in names
+          names.push obj.name
+        @save_to_cache(obj.name, obj.id, obj.versions)
+            
+      for name in names
+        Flakey.models.backend_controller.sync(name)
+      
+    @socket.emit 'fetch_all'
+
+  # List all objects from the given store
+  all: (name) ->
+    store = []
+    @server_cache[name] = @server_cache[name] || {}
+    (store.push(@get_from_cache(name, id)) for id in Object.keys(@server_cache[name]))
+    return store
+
+  # Get an object from the given store by its id
+  get: (name, id) ->
+    return @get_from_cache(name, id)
+
+  # Retreive Object from server cache
+  get_from_cache: (name, id) ->
+    if @server_cache[name]
+      if @server_cache[name][id]
+        return @server_cache[name][id]
+    return undefined
+
+  # Save an object to the store  
+  save: (name, id, versions, force_write) ->
+    proposed_obj = {id: id, versions: versions}
+    cached_obj = @get_from_cache(name, id)
+    
+    # Compare cached object to proposed save object
+    # Only actually save if they are different, or if force_write flag is true
+    if Flakey.util.deep_compare(proposed_obj, cached_obj) and force_write != true
+      return true
+
+    # Write objects to server
+    @socket.emit 'write', {name: name, id: id, versions: versions}, () =>
+      @save_to_cache name, id, versions
+    return @status
+
+  # Save object to server_cache
+  save_to_cache: (name, id, versions) ->
+    @server_cache[name] = @server_cache[name] || {}
+    @server_cache[name][id] = $.extend(true, {}, {id: id, versions: versions})
+
+  # Delete an item by id
+  delete: (name, id) ->
+    @socket.emit('delete', {name: name, id: id})
+    return @status
+
+  _query: (name, query) ->
+    throw new TypeError("_query not supported on socketio backend")
+
+  _query_by_id: (name, id) ->
+    throw new TypeError("_query_by_id not supported on socketio backend")
+
   _read: (name) ->
     return @all(name)
 

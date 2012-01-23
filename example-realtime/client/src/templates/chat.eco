@@ -1,0 +1,26 @@
+<div class="chat-window">
+	<ol>
+		<% for message in @messages: %>
+		<li title="<%= (new Date(message.sent)).toLocaleString() %>" class="<%= message.class %>">
+			<span class="user"><%= message.author %></span>
+			<span class="message"><%= message.content %></span>
+		</li>
+		<% end %>
+	<ol>
+</div>
+
+<div class="chat-entry">
+	<form action="" method="POST" id="message_form">
+		<input type="text" name="new_message" id="new_message" placeholder="Type a message" />
+		<input type="submit" value="Send" />
+	</form>
+</div>
+
+<div class="users">
+	<h2>Current Users</h2>
+	<ul>
+		<% for user in @users: %>
+		<li><%= user.name %></li>
+		<% end %>
+	</ul>
+</div>

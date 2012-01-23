@@ -1,19 +1,348 @@
-# ==========================================
-# Compiled: Sun Jan 22 2012 19:59:49 GMT-0500 (EST)
+var require = function (file, cwd) {
+    var resolved = require.resolve(file, cwd || '/');
+    var mod = require.modules[resolved];
+    if (!mod) throw new Error(
+        'Failed to resolve module ' + file + ', tried ' + resolved
+    );
+    var res = mod._cached ? mod._cached : mod();
+    return res;
+}
 
-# Contents:
-#   - src/lib/diff_match_patch.js
-#   - src/lib/jquery-1.7.1.js
-#   - src/lib/JSON2.js
-#   - src/flakey.coffee
-#   - src/util.coffee
-#   - src/models.coffee
-#   - src/controllers.coffee
-#   - src/views.coffee
-#   - src/exports.coffee
-# ==========================================
+require.paths = [];
+require.modules = {};
+require.extensions = [".js",".coffee"];
 
-`/**
+require._core = {
+    'assert': true,
+    'events': true,
+    'fs': true,
+    'path': true,
+    'vm': true
+};
+
+require.resolve = (function () {
+    return function (x, cwd) {
+        if (!cwd) cwd = '/';
+        
+        if (require._core[x]) return x;
+        var path = require.modules.path();
+        var y = cwd || '.';
+        
+        if (x.match(/^(?:\.\.?\/|\/)/)) {
+            var m = loadAsFileSync(path.resolve(y, x))
+                || loadAsDirectorySync(path.resolve(y, x));
+            if (m) return m;
+        }
+        
+        var n = loadNodeModulesSync(x, y);
+        if (n) return n;
+        
+        throw new Error("Cannot find module '" + x + "'");
+        
+        function loadAsFileSync (x) {
+            if (require.modules[x]) {
+                return x;
+            }
+            
+            for (var i = 0; i < require.extensions.length; i++) {
+                var ext = require.extensions[i];
+                if (require.modules[x + ext]) return x + ext;
+            }
+        }
+        
+        function loadAsDirectorySync (x) {
+            x = x.replace(/\/+$/, '');
+            var pkgfile = x + '/package.json';
+            if (require.modules[pkgfile]) {
+                var pkg = require.modules[pkgfile]();
+                var b = pkg.browserify;
+                if (typeof b === 'object' && b.main) {
+                    var m = loadAsFileSync(path.resolve(x, b.main));
+                    if (m) return m;
+                }
+                else if (typeof b === 'string') {
+                    var m = loadAsFileSync(path.resolve(x, b));
+                    if (m) return m;
+                }
+                else if (pkg.main) {
+                    var m = loadAsFileSync(path.resolve(x, pkg.main));
+                    if (m) return m;
+                }
+            }
+            
+            return loadAsFileSync(x + '/index');
+        }
+        
+        function loadNodeModulesSync (x, start) {
+            var dirs = nodeModulesPathsSync(start);
+            for (var i = 0; i < dirs.length; i++) {
+                var dir = dirs[i];
+                var m = loadAsFileSync(dir + '/' + x);
+                if (m) return m;
+                var n = loadAsDirectorySync(dir + '/' + x);
+                if (n) return n;
+            }
+            
+            var m = loadAsFileSync(x);
+            if (m) return m;
+        }
+        
+        function nodeModulesPathsSync (start) {
+            var parts;
+            if (start === '/') parts = [ '' ];
+            else parts = path.normalize(start).split('/');
+            
+            var dirs = [];
+            for (var i = parts.length - 1; i >= 0; i--) {
+                if (parts[i] === 'node_modules') continue;
+                var dir = parts.slice(0, i + 1).join('/') + '/node_modules';
+                dirs.push(dir);
+            }
+            
+            return dirs;
+        }
+    };
+})();
+
+require.alias = function (from, to) {
+    var path = require.modules.path();
+    var res = null;
+    try {
+        res = require.resolve(from + '/package.json', '/');
+    }
+    catch (err) {
+        res = require.resolve(from, '/');
+    }
+    var basedir = path.dirname(res);
+    
+    var keys = (Object.keys || function (obj) {
+        var res = [];
+        for (var key in obj) res.push(key)
+        return res;
+    })(require.modules);
+    
+    for (var i = 0; i < keys.length; i++) {
+        var key = keys[i];
+        if (key.slice(0, basedir.length + 1) === basedir + '/') {
+            var f = key.slice(basedir.length);
+            require.modules[to + f] = require.modules[basedir + f];
+        }
+        else if (key === basedir) {
+            require.modules[to] = require.modules[basedir];
+        }
+    }
+};
+
+require.define = function (filename, fn) {
+    var dirname = require._core[filename]
+        ? ''
+        : require.modules.path().dirname(filename)
+    ;
+    
+    var require_ = function (file) {
+        return require(file, dirname)
+    };
+    require_.resolve = function (name) {
+        return require.resolve(name, dirname);
+    };
+    require_.modules = require.modules;
+    require_.define = require.define;
+    var module_ = { exports : {} };
+    
+    require.modules[filename] = function () {
+        require.modules[filename]._cached = module_.exports;
+        fn.call(
+            module_.exports,
+            require_,
+            module_,
+            module_.exports,
+            dirname,
+            filename
+        );
+        require.modules[filename]._cached = module_.exports;
+        return module_.exports;
+    };
+};
+
+if (typeof process === 'undefined') process = {};
+
+if (!process.nextTick) process.nextTick = (function () {
+    var queue = [];
+    var canPost = typeof window !== 'undefined'
+        && window.postMessage && window.addEventListener
+    ;
+    
+    if (canPost) {
+        window.addEventListener('message', function (ev) {
+            if (ev.source === window && ev.data === 'browserify-tick') {
+                ev.stopPropagation();
+                if (queue.length > 0) {
+                    var fn = queue.shift();
+                    fn();
+                }
+            }
+        }, true);
+    }
+    
+    return function (fn) {
+        if (canPost) {
+            queue.push(fn);
+            window.postMessage('browserify-tick', '*');
+        }
+        else setTimeout(fn, 0);
+    };
+})();
+
+if (!process.title) process.title = 'browser';
+
+if (!process.binding) process.binding = function (name) {
+    if (name === 'evals') return require('vm')
+    else throw new Error('No such module')
+};
+
+if (!process.cwd) process.cwd = function () { return '.' };
+
+require.define("path", function (require, module, exports, __dirname, __filename) {
+function filter (xs, fn) {
+    var res = [];
+    for (var i = 0; i < xs.length; i++) {
+        if (fn(xs[i], i, xs)) res.push(xs[i]);
+    }
+    return res;
+}
+
+// resolves . and .. elements in a path array with directory names there
+// must be no slashes, empty elements, or device names (c:\) in the array
+// (so also no leading and trailing slashes - it does not distinguish
+// relative and absolute paths)
+function normalizeArray(parts, allowAboveRoot) {
+  // if the path tries to go above the root, `up` ends up > 0
+  var up = 0;
+  for (var i = parts.length; i >= 0; i--) {
+    var last = parts[i];
+    if (last == '.') {
+      parts.splice(i, 1);
+    } else if (last === '..') {
+      parts.splice(i, 1);
+      up++;
+    } else if (up) {
+      parts.splice(i, 1);
+      up--;
+    }
+  }
+
+  // if the path is allowed to go above the root, restore leading ..s
+  if (allowAboveRoot) {
+    for (; up--; up) {
+      parts.unshift('..');
+    }
+  }
+
+  return parts;
+}
+
+// Regex to split a filename into [*, dir, basename, ext]
+// posix version
+var splitPathRe = /^(.+\/(?!$)|\/)?((?:.+?)?(\.[^.]*)?)$/;
+
+// path.resolve([from ...], to)
+// posix version
+exports.resolve = function() {
+var resolvedPath = '',
+    resolvedAbsolute = false;
+
+for (var i = arguments.length; i >= -1 && !resolvedAbsolute; i--) {
+  var path = (i >= 0)
+      ? arguments[i]
+      : process.cwd();
+
+  // Skip empty and invalid entries
+  if (typeof path !== 'string' || !path) {
+    continue;
+  }
+
+  resolvedPath = path + '/' + resolvedPath;
+  resolvedAbsolute = path.charAt(0) === '/';
+}
+
+// At this point the path should be resolved to a full absolute path, but
+// handle relative paths to be safe (might happen when process.cwd() fails)
+
+// Normalize the path
+resolvedPath = normalizeArray(filter(resolvedPath.split('/'), function(p) {
+    return !!p;
+  }), !resolvedAbsolute).join('/');
+
+  return ((resolvedAbsolute ? '/' : '') + resolvedPath) || '.';
+};
+
+// path.normalize(path)
+// posix version
+exports.normalize = function(path) {
+var isAbsolute = path.charAt(0) === '/',
+    trailingSlash = path.slice(-1) === '/';
+
+// Normalize the path
+path = normalizeArray(filter(path.split('/'), function(p) {
+    return !!p;
+  }), !isAbsolute).join('/');
+
+  if (!path && !isAbsolute) {
+    path = '.';
+  }
+  if (path && trailingSlash) {
+    path += '/';
+  }
+  
+  return (isAbsolute ? '/' : '') + path;
+};
+
+
+// posix version
+exports.join = function() {
+  var paths = Array.prototype.slice.call(arguments, 0);
+  return exports.normalize(filter(paths, function(p, index) {
+    return p && typeof p === 'string';
+  }).join('/'));
+};
+
+
+exports.dirname = function(path) {
+  var dir = splitPathRe.exec(path)[1] || '';
+  var isWindows = false;
+  if (!dir) {
+    // No dirname
+    return '.';
+  } else if (dir.length === 1 ||
+      (isWindows && dir.length <= 3 && dir.charAt(1) === ':')) {
+    // It is just a slash or a drive letter with a slash
+    return dir;
+  } else {
+    // It is a full dirname, strip trailing slash
+    return dir.substring(0, dir.length - 1);
+  }
+};
+
+
+exports.basename = function(path, ext) {
+  var f = splitPathRe.exec(path)[2] || '';
+  // TODO: make this comparison case-insensitive on windows?
+  if (ext && f.substr(-1 * ext.length) === ext) {
+    f = f.substr(0, f.length - ext.length);
+  }
+  return f;
+};
+
+
+exports.extname = function(path) {
+  return splitPathRe.exec(path)[3] || '';
+};
+
+});
+
+require.define("/flakey.js", function (require, module, exports, __dirname, __filename) {
+(function() {
+  /**
  * Diff Match and Patch
  *
  * Copyright 2006 Google Inc.
@@ -2199,9 +2528,8 @@ diff_match_patch.patch_obj.prototype.toString = function() {
 this['diff_match_patch'] = diff_match_patch;
 this['DIFF_DELETE'] = DIFF_DELETE;
 this['DIFF_INSERT'] = DIFF_INSERT;
-this['DIFF_EQUAL'] = DIFF_EQUAL`
-
-`/*!
+this['DIFF_EQUAL'] = DIFF_EQUAL;
+  /*!
  * jQuery JavaScript Library v1.7.1
  * http://jquery.com/
  *
@@ -11466,9 +11794,8 @@ if ( typeof define === "function" && define.amd && define.amd.jQuery ) {
 
 
 
-})( window );`
-
-`/*
+})( window );;
+  /*
     http://www.JSON.org/json2.js
     2011-10-19
 
@@ -11954,987 +12281,1622 @@ if (!JSON) {
             throw new SyntaxError('JSON.parse');
         };
     }
-}());`
+}());;
+  var $, Backend, BackendController, Controller, Events, Flakey, JSON, LocalBackend, MemoryBackend, Model, ServerBackend, SocketIOBackend, Stack, Template, get_template,
+    __hasProp = Object.prototype.hasOwnProperty,
+    __indexOf = Array.prototype.indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; },
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; },
+    __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
 
-# ==========================================
-# Flakey.js
-# Craig Weber
-# ==========================================
+  Flakey = {
+    diff_patch: new diff_match_patch(),
+    settings: {
+      diff_text: true,
+      container: void 0,
+      read_backend: 'memory',
+      base_model_endpoint: null,
+      socketio_server: null,
+      enabled_local_backend: true
+    },
+    status: {
+      server_online: void 0
+    }
+  };
 
-Flakey = {
-  diff_patch: new diff_match_patch()
-  settings: {
-    diff_text: true
-    container: undefined
-    read_backend: 'memory'
-    base_model_endpoint: null #'/api'
-    socketio_server: null
-    enabled_local_backend: true
-  }
-  status: {
-    server_online: undefined 
-  }
-}
+  jQuery.noConflict();
 
-jQuery.noConflict();
-$ = Flakey.$ = jQuery
-JSON = Flakey.JSON = JSON
+  $ = Flakey.$ = jQuery;
 
-Flakey.init = (config) ->
-  # Setup config
-  for own key, value of config
-    Flakey.settings[key] = value
-  
-  # Init this now so the new settings take effect
-  Flakey.models.backend_controller = new Flakey.models.BackendController()
-  
+  JSON = Flakey.JSON = JSON;
 
-if window
-  window.Flakey = Flakey
+  Flakey.init = function(config) {
+    var key, value;
+    for (key in config) {
+      if (!__hasProp.call(config, key)) continue;
+      value = config[key];
+      Flakey.settings[key] = value;
+    }
+    return Flakey.models.backend_controller = new Flakey.models.BackendController();
+  };
 
+  if (window) window.Flakey = Flakey;
 
-# ==========================================
-# Flakey.js Utility Functions
-# Craig Weber
-# ==========================================
+  Flakey.util = {
+    async: function(fn) {
+      return setTimeout(fn, 0);
+    },
+    deep_compare: function(a, b) {
+      var compare_objects;
+      if (typeof a !== typeof b) return false;
+      compare_objects = function(a, b) {
+        var key, value;
+        for (key in a) {
+          value = a[key];
+          if (!(b[key] != null)) return false;
+        }
+        for (key in b) {
+          value = b[key];
+          if (!(a[key] != null)) return false;
+        }
+        for (key in a) {
+          value = a[key];
+          if (value) {
+            switch (typeof value) {
+              case 'object':
+                if (!compare_objects(value, b[key])) return false;
+                break;
+              default:
+                if (value !== b[key]) return false;
+            }
+          } else {
+            if (b[key]) return false;
+          }
+        }
+        return true;
+      };
+      switch (typeof a) {
+        case 'object':
+          if (!compare_objects(a, b)) return false;
+          break;
+        default:
+          if (a !== b) return false;
+      }
+      return true;
+    },
+    guid: function() {
+      var guid;
+      guid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx';
+      guid = guid.replace(/[xy]/g, function(c) {
+        var r, v;
+        r = Math.random() * 16 | 0;
+        if (c === 'x') {
+          v = r;
+        } else {
+          v = r & 3 | 8;
+        }
+        v.toString(16).toUpperCase();
+        return v;
+      });
+      return guid;
+    },
+    get_hash: function() {
+      var hash;
+      hash = window.location.hash;
+      if (hash.indexOf('#') === 0) hash = hash.slice(1);
+      return hash;
+    },
+    querystring: {
+      parse: function(str) {
+        var key, pair, pairs, params, value, _i, _len;
+        if (!str || str.constructor !== String) return {};
+        pairs = str.split('&');
+        params = {};
+        for (_i = 0, _len = pairs.length; _i < _len; _i++) {
+          pair = pairs[_i];
+          pair = pair.split('=');
+          key = decodeURIComponent(pair[0]);
+          value = decodeURIComponent(pair[1]);
+          params[key] = value;
+        }
+        return params;
+      },
+      build: function(params) {
+        var key, pairs, value;
+        if (!params || params.constructor !== Object) return '';
+        pairs = [];
+        for (key in params) {
+          if (!__hasProp.call(params, key)) continue;
+          value = params[key];
+          pairs.push("" + (encodeURIComponent(key)) + "=" + (encodeURIComponent(value)));
+        }
+        return pairs.join('&');
+      },
+      update: function(params, merge) {
+        var hash, location, query;
+        if (merge == null) merge = false;
+        hash = Flakey.util.get_hash();
+        if (hash.indexOf('?')) {
+          hash = hash.split('?');
+          location = hash[0];
+          query = Flakey.util.querystring.parse(hash[1]);
+        } else {
+          location = hash;
+          query = {};
+        }
+        if (merge) {
+          $.extend(query, params);
+        } else {
+          query = params;
+        }
+        return window.location.hash = "" + location + "?" + (Flakey.util.querystring.build(query));
+      }
+    }
+  };
 
+  Events = (function() {
 
-Flakey.util = {
-  # Run function asynchronously
-  async: (fn) ->
-    setTimeout(fn, 0)
-    
-  # Deep Compare 2 objects
-  # Return true if they are equal
-  deep_compare: (a, b) ->
-    if typeof a != typeof b
-      return false
-      
-    compare_objects = (a, b) ->
-      for key, value of a
-        if not b[key]?
-          return false
+    function Events() {}
 
-      for key, value of b
-        if not a[key]?
-          return false
+    Events.prototype.events = {};
 
-      for key, value of a
-        if value
-          switch typeof value
-            when 'object'
-              if not compare_objects(value, b[key])
-                return false
-            else
-              if value != b[key]
-                return false
-        else
-          if b[key]
-            return false
+    Events.prototype.register = function(event, fn, namespace) {
+      if (namespace == null) namespace = 'flakey';
+      if (this.events[namespace] === void 0) this.events[namespace] = {};
+      if (this.events[namespace][event] === void 0) {
+        this.events[namespace][event] = [];
+      }
+      this.events[namespace][event].push(fn);
+      return this.events[namespace][event];
+    };
 
-      return true
-      
-    switch typeof a
-      when 'object'
-        if not compare_objects(a, b)
-          return false
-      else
-        if a != b
-          return false
-          
-    return true
-  
-  # GUID function from spine.js
-  # https://github.com/maccman/spine/blob/master/src/spine.coffee
-  guid: () ->
-    guid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
-    guid = guid.replace(/[xy]/g, (c) ->
-      r = Math.random() * 16 | 0
-      if c == 'x'
-        v = r 
-      else 
-        v = r & 3 | 8
-      v.toString(16).toUpperCase()
-      return v
-    )
-    return guid
-    
-  # Return current URL hash
-  get_hash: () ->
-    hash = window.location.hash
-    if hash.indexOf('#') == 0
-      hash = hash.slice(1)
-    return hash
+    Events.prototype.trigger = function(event, namespace, data) {
+      var fn, output, _i, _len, _ref;
+      if (namespace == null) namespace = 'flakey';
+      if (data == null) data = {};
+      if (this.events[namespace] === void 0) this.events[namespace] = {};
+      if (this.events[namespace][event] === void 0) return;
+      output = [];
+      _ref = this.events[namespace][event];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        fn = _ref[_i];
+        output.push(fn(event, namespace, data));
+      }
+      return output;
+    };
 
-  # Querystring functions
-  querystring : {
-    # Parse a querystring and return an obj of key/values
-    parse: (str) ->
-      if not str or str.constructor != String
-        return {}
-      pairs = str.split('&')
-      params = {}
-      for pair in pairs
-        pair = pair.split('=')
-        key = decodeURIComponent(pair[0])
-        value = decodeURIComponent(pair[1])
-        params[key] = value
-      return params
-      
-    # Build a querystring out of an obj
-    build: (params) ->
-      if not params or params.constructor != Object
-        return ''
-      pairs = []
-      for own key, value of params
-        pairs.push "#{encodeURIComponent(key)}=#{encodeURIComponent(value)}"
-      return pairs.join('&')
-      
-    # Update the page's current querystring
-    update: (params, merge = false) ->
-      hash = Flakey.util.get_hash()
-      if hash.indexOf('?')
-        hash = hash.split('?')
-        location = hash[0]
-        query = Flakey.util.querystring.parse(hash[1])
-      else
-        location = hash
-        query = {}
-      if merge
-        $.extend(query, params)
-      else
-        query = params
-      window.location.hash = "#{location}?#{Flakey.util.querystring.build(query)}"
-  }
-}
+    Events.prototype.clear = function(namespace) {
+      if (namespace == null) namespace = 'flakey';
+      return this.events[namespace] = {};
+    };
 
-  
-# Basic Event System
-class Events
-  events: {}
-  
-  register: (event, fn, namespace = 'flakey') ->
-    if @events[namespace] == undefined
-      @events[namespace] = {}
-    if @events[namespace][event] == undefined
-      @events[namespace][event] = []
-    @events[namespace][event].push(fn)
-    return @events[namespace][event]
-    
-  trigger: (event, namespace = 'flakey', data = {}) ->
-    if @events[namespace] == undefined
-      @events[namespace] = {}
-    if @events[namespace][event] == undefined
-      return
-    output = []
-    for fn in @events[namespace][event]
-      output.push(fn(event, namespace, data))
-    return output
-    
-  clear: (namespace = 'flakey') ->
-    @events[namespace] = {}
-  
-Flakey.events = new Events()
+    return Events;
 
+  })();
 
-# ==========================================
-# Flakey.js Models
-# Craig Weber
-# ==========================================
+  Flakey.events = new Events();
 
+  Model = (function() {
 
-class Model
-  @model_name: null
-  @fields: ['id']
-  
-  constructor: (init_values) ->
-    @id = Flakey.util.guid()
-    @versions = []
-    
-    for own key, value of init_values
-      @[key] = value
-  
-  # Get all objects
-  @all: () ->
-    set = []
-    for obj in Flakey.models.backend_controller.all(@model_name)
-      m = new @()
-      m.import(obj)
-      set.push(m)
-    return set
-    
-  delete: () ->
-    Flakey.models.backend_controller.delete(@constructor.model_name, @id)
-    event_key = "model_#{ @constructor.model_name.toLowerCase() }_updated"
-    Flakey.events.trigger(event_key, undefined)
-    
-  diff: (new_obj, old_obj) ->
-    save = {}
-    for key in @constructor.fields
-      if not Flakey.util.deep_compare(new_obj[key], old_obj[key])
-        switch new_obj[key].constructor
-          when Object
-            save[key] = $.extend(true, {}, new_obj[key])
-          when Array
-            save[key] = $.extend(true, [], new_obj[key])
-          when String
-            old_obj[key] = if old_obj[key]? then old_obj[key].toString() else ''
-            if Flakey.settings.diff_text
-              patches = Flakey.diff_patch.patch_make(old_obj[key], new_obj[key])
-              save[key] = {
-                constructor: 'Patch'
-                patch_text: Flakey.diff_patch.patch_toText(patches)
+    Model.model_name = null;
+
+    Model.fields = ['id'];
+
+    function Model(init_values) {
+      var key, value;
+      this.id = Flakey.util.guid();
+      this.versions = [];
+      for (key in init_values) {
+        if (!__hasProp.call(init_values, key)) continue;
+        value = init_values[key];
+        this[key] = value;
+      }
+    }
+
+    Model.all = function() {
+      var m, obj, set, _i, _len, _ref;
+      set = [];
+      _ref = Flakey.models.backend_controller.all(this.model_name);
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        obj = _ref[_i];
+        m = new this();
+        m["import"](obj);
+        set.push(m);
+      }
+      return set;
+    };
+
+    Model.prototype["delete"] = function() {
+      var event_key;
+      Flakey.models.backend_controller["delete"](this.constructor.model_name, this.id);
+      event_key = "model_" + (this.constructor.model_name.toLowerCase()) + "_updated";
+      return Flakey.events.trigger(event_key, void 0);
+    };
+
+    Model.prototype.diff = function(new_obj, old_obj) {
+      var key, patches, save, _i, _len, _ref;
+      save = {};
+      _ref = this.constructor.fields;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        key = _ref[_i];
+        if (!Flakey.util.deep_compare(new_obj[key], old_obj[key])) {
+          switch (new_obj[key].constructor) {
+            case Object:
+              save[key] = $.extend(true, {}, new_obj[key]);
+              break;
+            case Array:
+              save[key] = $.extend(true, [], new_obj[key]);
+              break;
+            case String:
+              old_obj[key] = old_obj[key] != null ? old_obj[key].toString() : '';
+              if (Flakey.settings.diff_text) {
+                patches = Flakey.diff_patch.patch_make(old_obj[key], new_obj[key]);
+                save[key] = {
+                  constructor: 'Patch',
+                  patch_text: Flakey.diff_patch.patch_toText(patches)
+                };
+              } else {
+                save[key] = new_obj[key];
               }
-            else
-              save[key] = new_obj[key]
-          else
-            save[key] = new_obj[key]
-    return save
-  
-  export: () ->
-    obj = {}
-    for field in @constructor.fields
-      obj[field] = @[field]
-    return obj
-    
-  evolve: (version_id) ->
-    obj = {}
-    saved = Flakey.models.backend_controller.get(@constructor.model_name, @id)
-    versions = if saved? then saved.versions else {}
-    
-    for rev in versions
-      for own key, value of rev.fields
-        switch value.constructor
-          when 'Patch'
-            patches = Flakey.diff_patch.patch_fromText(value.patch_text)
-            obj[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0]
-          when Object
-            obj[key] = $.extend(true, {}, value)
-          when Array
-            obj[key] = $.extend(true, [], value)
-          else
-            obj[key] = value
-      if version_id != undefined and version_id == rev.version_id
-        return obj
-    return obj
-    
-  # Query for a set of objects by a query object
-  @find: (query) ->
-    ar = Flakey.models.backend_controller.find(@model_name, query)
-    if not ar.length
-      return []
-    
-    set = []
-    for item in ar
-      m = new @()
-      m.import(item)
-      set.push(m)
-    return set
-    
-  # Query for a single object by id
-  @get: (id) ->
-    obj = Flakey.models.backend_controller.get(@model_name, id)
-    if not obj
-      return undefined
-    m = new @()
-    m.import(obj)
-    return m
-    
-  import: (obj) ->
-    @versions = obj.versions
-    @id = obj.id
-    for own key, value of @evolve()
-      @[key] = value
-      
-  pop_version: () ->
-    @versions.pop()
-    
-  push_version: (diff) ->
-    version_id = Flakey.util.guid()
-    version = {
-      version_id: version_id,
-      time: +(new Date()),
-      fields: $.extend(true, {}, diff)
+              break;
+            default:
+              save[key] = new_obj[key];
+          }
+        }
+      }
+      return save;
+    };
+
+    Model.prototype["export"] = function() {
+      var field, obj, _i, _len, _ref;
+      obj = {};
+      _ref = this.constructor.fields;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        field = _ref[_i];
+        obj[field] = this[field];
+      }
+      return obj;
+    };
+
+    Model.prototype.evolve = function(version_id) {
+      var key, obj, patches, rev, saved, value, versions, _i, _len, _ref;
+      obj = {};
+      saved = Flakey.models.backend_controller.get(this.constructor.model_name, this.id);
+      versions = saved != null ? saved.versions : {};
+      for (_i = 0, _len = versions.length; _i < _len; _i++) {
+        rev = versions[_i];
+        _ref = rev.fields;
+        for (key in _ref) {
+          if (!__hasProp.call(_ref, key)) continue;
+          value = _ref[key];
+          switch (value.constructor) {
+            case 'Patch':
+              patches = Flakey.diff_patch.patch_fromText(value.patch_text);
+              obj[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0];
+              break;
+            case Object:
+              obj[key] = $.extend(true, {}, value);
+              break;
+            case Array:
+              obj[key] = $.extend(true, [], value);
+              break;
+            default:
+              obj[key] = value;
+          }
+        }
+        if (version_id !== void 0 && version_id === rev.version_id) return obj;
+      }
+      return obj;
+    };
+
+    Model.find = function(query) {
+      var ar, item, m, set, _i, _len;
+      ar = Flakey.models.backend_controller.find(this.model_name, query);
+      if (!ar.length) return [];
+      set = [];
+      for (_i = 0, _len = ar.length; _i < _len; _i++) {
+        item = ar[_i];
+        m = new this();
+        m["import"](item);
+        set.push(m);
+      }
+      return set;
+    };
+
+    Model.get = function(id) {
+      var m, obj;
+      obj = Flakey.models.backend_controller.get(this.model_name, id);
+      if (!obj) return;
+      m = new this();
+      m["import"](obj);
+      return m;
+    };
+
+    Model.prototype["import"] = function(obj) {
+      var key, value, _ref, _results;
+      this.versions = obj.versions;
+      this.id = obj.id;
+      _ref = this.evolve();
+      _results = [];
+      for (key in _ref) {
+        if (!__hasProp.call(_ref, key)) continue;
+        value = _ref[key];
+        _results.push(this[key] = value);
+      }
+      return _results;
+    };
+
+    Model.prototype.pop_version = function() {
+      return this.versions.pop();
+    };
+
+    Model.prototype.push_version = function(diff) {
+      var version, version_id;
+      version_id = Flakey.util.guid();
+      version = {
+        version_id: version_id,
+        time: +(new Date()),
+        fields: $.extend(true, {}, diff)
+      };
+      Object.freeze(version);
+      return this.versions.push(version);
+    };
+
+    Model.prototype.save = function(callback) {
+      var diff, new_obj, old_obj,
+        _this = this;
+      new_obj = this["export"]();
+      old_obj = this.evolve();
+      diff = this.diff(new_obj, old_obj);
+      if (Object.keys(diff).length > 0) {
+        this.push_version(diff);
+        Flakey.util.async(function() {
+          var event_key;
+          Flakey.models.backend_controller.save(_this.constructor.model_name, _this.id, _this.versions);
+          if (callback != null) callback();
+          event_key = "model_" + (_this.constructor.model_name.toLowerCase()) + "_updated";
+          return Flakey.events.trigger(event_key, void 0);
+        });
+      } else if (callback != null) {
+        callback();
+      }
+      return true;
+    };
+
+    return Model;
+
+  })();
+
+  BackendController = (function() {
+
+    function BackendController() {
+      this.delim = ':::';
+      this.backends = {
+        memory: {
+          log_key: 'flakey-memory-log',
+          pending_log: [],
+          interface: new MemoryBackend()
+        }
+      };
+      if (Flakey.settings.enabled_local_backend) {
+        this.backends['local'] = {
+          log_key: 'flakey-local-log',
+          pending_log: [],
+          interface: new LocalBackend()
+        };
+      }
+      if (Flakey.settings.base_model_endpoint) {
+        this.backends['server'] = {
+          log_key: 'flakey-server-log',
+          pending_log: [],
+          interface: new ServerBackend()
+        };
+      }
+      if (Flakey.settings.socketio_server) {
+        this.backends['socketio'] = {
+          log_key: 'flakey-socketio-log',
+          pending_log: [],
+          interface: new SocketIOBackend()
+        };
+      }
+      this.read = Flakey.settings.read_backend || 'memory';
+      this.load_logs();
     }
-    Object.freeze(version)
-    @versions.push(version)
-    
-  save: (callback) ->
-    new_obj = @export()
-    old_obj = @evolve()
-    diff = @diff(new_obj, old_obj)
-    # Don't save empty versions
-    if Object.keys(diff).length > 0
-      @push_version(diff)
-      # Run this asynchronously so that server traffic doesn't lock the UI
-      Flakey.util.async () =>
-        Flakey.models.backend_controller.save(@constructor.model_name, @id, @versions)
-        if callback? then callback()
-        # Trigger the saved event
-        event_key = "model_#{ @constructor.model_name.toLowerCase() }_updated"
-        Flakey.events.trigger(event_key, undefined)
-    else if callback?
-      callback()
-    return true
 
+    BackendController.prototype.all = function(name) {
+      return this.backends[this.read].interface.all(name);
+    };
 
-class BackendController
-  constructor: () ->
-    @delim = ':::'
-    @backends = {
-      memory: {
-        log_key: 'flakey-memory-log'
-        pending_log: []
-        interface: new MemoryBackend()
+    BackendController.prototype.get = function(name, id) {
+      return this.backends[this.read].interface.get(name, id);
+    };
+
+    BackendController.prototype.find = function(name, query) {
+      return this.backends[this.read].interface.find(name, query);
+    };
+
+    BackendController.prototype.save = function(name, id, versions, backends) {
+      var backend, bname, log_msg;
+      if (backends == null) backends = this.backends;
+      for (bname in backends) {
+        if (!__hasProp.call(backends, bname)) continue;
+        backend = backends[bname];
+        log_msg = 'save' + this.delim + JSON.stringify([name, id, versions]);
+        if (backend.pending_log.length) {
+          backend.pending_log.push(log_msg);
+          this.commit_logs();
+          this.exec_log();
+          return false;
+        }
+        if (!backend.interface.save(name, id, versions)) {
+          backend.pending_log.push(log_msg);
+          this.commit_logs();
+          return false;
+        }
+      }
+      return true;
+    };
+
+    BackendController.prototype["delete"] = function(name, id, backends) {
+      var backend, bname, log_msg;
+      if (backends == null) backends = this.backends;
+      for (bname in backends) {
+        if (!__hasProp.call(backends, bname)) continue;
+        backend = backends[bname];
+        log_msg = 'delete' + this.delim + JSON.stringify([name, id]);
+        if (backend.pending_log.length) {
+          backend.pending_log.push(log_msg);
+          this.commit_logs();
+          this.exec_log();
+          return false;
+        }
+        if (!backend.interface["delete"](name, id)) {
+          backend.pending_log.push(log_msg);
+          this.commit_logs();
+          return false;
+        }
+      }
+      return true;
+    };
+
+    BackendController.prototype.exec_log = function() {
+      var action, backend, bends, fn, log, msg, name, params, _i, _len, _ref;
+      _ref = this.backends;
+      for (name in _ref) {
+        if (!__hasProp.call(_ref, name)) continue;
+        backend = _ref[name];
+        log = backend.pending_log;
+        for (_i = 0, _len = log.length; _i < _len; _i++) {
+          msg = log[_i];
+          if (msg != null) {
+            action = msg.split(this.delim);
+            fn = Flakey.models.backend_controller.backends[name].interface[action[0]];
+            params = JSON.parse(action[1]);
+            bends = {};
+            bends[name] = backend;
+            params.push(bends);
+            if (fn.apply(Flakey.models.backend_controller.backends[name].interface, params)) {
+              backend.pending_log.shift();
+            } else {
+              break;
+            }
+          }
+        }
+      }
+      return this.commit_logs();
+    };
+
+    BackendController.prototype.commit_logs = function(backends) {
+      var backend, name;
+      if (backends == null) backends = this.backends;
+      for (name in backends) {
+        if (!__hasProp.call(backends, name)) continue;
+        backend = backends[name];
+        localStorage[backend.log_key] = JSON.stringify(backend.pending_log);
+      }
+      return true;
+    };
+
+    BackendController.prototype.load_logs = function(backends) {
+      var backend, name;
+      if (backends == null) backends = this.backends;
+      for (name in backends) {
+        if (!__hasProp.call(backends, name)) continue;
+        backend = backends[name];
+        if (!(localStorage[backend.log_key] != null)) break;
+        backend.pending_log = JSON.parse(localStorage[backend.log_key]);
+      }
+      return true;
+    };
+
+    BackendController.prototype.sync = function(name, backends) {
+      var backend, bname, event_key, item, key, output, store, _i, _len, _ref, _ref2;
+      if (backends == null) backends = this.backends;
+      store = {};
+      for (bname in backends) {
+        if (!__hasProp.call(backends, bname)) continue;
+        backend = backends[bname];
+        _ref = backend.interface.all(name);
+        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+          item = _ref[_i];
+          if (_ref2 = item.id, __indexOf.call(Object.keys(store), _ref2) >= 0) {
+            store[item.id].versions = this.merge_version_lists(item.versions, store[item.id].versions);
+          } else {
+            store[item.id] = item;
+          }
+        }
+      }
+      output = [];
+      for (key in store) {
+        if (!__hasProp.call(store, key)) continue;
+        item = store[key];
+        output.push(item);
+      }
+      for (bname in backends) {
+        if (!__hasProp.call(backends, bname)) continue;
+        backend = backends[bname];
+        backend.interface._write(name, output);
+      }
+      event_key = "model_" + (name.toLowerCase()) + "_updated";
+      return Flakey.events.trigger(event_key, void 0);
+    };
+
+    BackendController.prototype.merge_version_lists = function(a, b) {
+      var key, keys, output, rev, temp, value, _i, _j, _len, _len2, _ref, _ref2, _ref3;
+      temp = {};
+      _ref = a.concat(b);
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        rev = _ref[_i];
+        if (_ref2 = rev.time, __indexOf.call(Object.keys(temp), _ref2) >= 0) {
+          if (rev.id !== temp[rev.time].id) {
+            _ref3 = rev.fields;
+            for (key in _ref3) {
+              if (!__hasProp.call(_ref3, key)) continue;
+              value = _ref3[key];
+              temp[rev.time].fields[key] = value;
+            }
+          } else {
+            temp[rev.time] = rev;
+          }
+        } else {
+          temp[rev.time] = rev;
+        }
+      }
+      keys = Object.keys(temp);
+      keys.sort(function(a, b) {
+        return a - b;
+      });
+      output = [];
+      for (_j = 0, _len2 = keys.length; _j < _len2; _j++) {
+        key = keys[_j];
+        output.push(temp[key]);
+      }
+      return output;
+    };
+
+    return BackendController;
+
+  })();
+
+  Backend = (function() {
+
+    function Backend() {}
+
+    Backend.prototype.all = function(name) {
+      var store;
+      store = this._read(name);
+      if (!store) return [];
+      return store;
+    };
+
+    Backend.prototype.get = function(name, id) {
+      var index, store;
+      store = this._read(name);
+      index = this._query_by_id(name, id);
+      if (index === -1) return;
+      return store[index];
+    };
+
+    Backend.prototype.find = function(name, query) {
+      var i, iset, set, store, _i, _len;
+      store = this._read(name);
+      iset = this._query(name, query);
+      set = [];
+      for (_i = 0, _len = iset.length; _i < _len; _i++) {
+        i = iset[_i];
+        set.push(store[i]);
+      }
+      return set;
+    };
+
+    Backend.prototype.save = function(name, id, versions) {
+      var index, obj, store;
+      store = this._read(name);
+      if (!store) store = [];
+      index = this._query_by_id(name, id);
+      obj = {
+        id: id,
+        versions: versions
+      };
+      if (index === -1) {
+        store.push(obj);
+      } else {
+        store[index] = obj;
+      }
+      return this._write(name, store);
+    };
+
+    Backend.prototype["delete"] = function(name, id) {
+      var index, store;
+      store = this._read(name);
+      index = this._query_by_id(name, id);
+      if (index === -1) return true;
+      store.splice(index, 1);
+      return this._write(name, store);
+    };
+
+    Backend.prototype._query = function(name, query) {
+      var i, key, obj, rendered, set, store, value, _i, _len;
+      store = this._read(name);
+      if (!store) return [];
+      set = [];
+      i = 0;
+      for (_i = 0, _len = store.length; _i < _len; _i++) {
+        obj = store[_i];
+        rendered = this._render_obj(obj);
+        for (key in query) {
+          if (!__hasProp.call(query, key)) continue;
+          value = query[key];
+          if (rendered[key] === value) set.push(i);
+        }
+        i++;
+      }
+      return set;
+    };
+
+    Backend.prototype._query_by_id = function(name, id) {
+      var i, obj, store, _i, _len;
+      store = this._read(name);
+      if (!store) return -1;
+      i = 0;
+      for (_i = 0, _len = store.length; _i < _len; _i++) {
+        obj = store[_i];
+        if (obj.id === id) return i;
+        i++;
+      }
+      return -1;
+    };
+
+    Backend.prototype._render_obj = function(obj) {
+      var key, output, patches, rev, value, _i, _len, _ref, _ref2;
+      output = {};
+      _ref = obj.versions;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        rev = _ref[_i];
+        _ref2 = rev.fields;
+        for (key in _ref2) {
+          if (!__hasProp.call(_ref2, key)) continue;
+          value = _ref2[key];
+          if (value.constructor === 'Patch') {
+            patches = Flakey.diff_patch.patch_fromText(value.patch_text);
+            output[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0];
+          } else {
+            output[key] = value;
+          }
+        }
+      }
+      return output;
+    };
+
+    return Backend;
+
+  })();
+
+  MemoryBackend = (function(_super) {
+
+    __extends(MemoryBackend, _super);
+
+    function MemoryBackend() {
+      if (!window.memcache) window.memcache = {};
+    }
+
+    MemoryBackend.prototype._read = function(name) {
+      return window.memcache[name];
+    };
+
+    MemoryBackend.prototype._write = function(name, store) {
+      window.memcache[name] = store;
+      return true;
+    };
+
+    return MemoryBackend;
+
+  })(Backend);
+
+  LocalBackend = (function(_super) {
+
+    __extends(LocalBackend, _super);
+
+    function LocalBackend() {
+      this.prefix = 'flakey-';
+    }
+
+    LocalBackend.prototype._read = function(name) {
+      var store;
+      if (!localStorage[this.prefix + name]) {
+        localStorage[this.prefix + name] = JSON.stringify([]);
+      }
+      store = JSON.parse(localStorage[this.prefix + name]);
+      return store;
+    };
+
+    LocalBackend.prototype._write = function(name, store) {
+      localStorage[this.prefix + name] = JSON.stringify(store);
+      return true;
+    };
+
+    return LocalBackend;
+
+  })(Backend);
+
+  ServerBackend = (function(_super) {
+
+    __extends(ServerBackend, _super);
+
+    function ServerBackend() {
+      this.server_cache = {};
+    }
+
+    ServerBackend.prototype.build_endpoint_url = function(name, id, params) {
+      var querystring, url;
+      url = "" + Flakey.settings.base_model_endpoint + "/" + name;
+      if (id != null) url += "/" + id;
+      if ((params != null) && params.constructor === Object) {
+        querystring = Flakey.util.querystring.build(params);
+        url += "?" + querystring;
+      }
+      return url;
+    };
+
+    ServerBackend.prototype.all = function(name) {
+      var obj, store, _i, _len;
+      store = false;
+      $.ajax({
+        async: false,
+        url: this.build_endpoint_url(name),
+        dataType: 'json',
+        error: function() {
+          return Flakey.status.server_online = false;
+        },
+        success: function(data) {
+          Flakey.status.server_online = true;
+          return store = data;
+        },
+        type: 'GET'
+      });
+      for (_i = 0, _len = store.length; _i < _len; _i++) {
+        obj = store[_i];
+        this.save_to_cache(name, obj.id, obj.versions);
+      }
+      return store;
+    };
+
+    ServerBackend.prototype.get = function(name, id) {
+      var obj;
+      obj = false;
+      $.ajax({
+        async: false,
+        url: this.build_endpoint_url(name, id),
+        dataType: 'json',
+        error: function() {
+          return Flakey.status.server_online = false;
+        },
+        success: function(data) {
+          Flakey.status.server_online = true;
+          return obj = data;
+        },
+        type: 'GET'
+      });
+      this.save_to_cache(name, obj.id, obj.versions);
+      return obj;
+    };
+
+    ServerBackend.prototype.get_from_cache = function(name, id) {
+      if (this.server_cache[name]) {
+        if (this.server_cache[name][id]) return this.server_cache[name][id];
+      }
+    };
+
+    ServerBackend.prototype.save = function(name, id, versions, force_write) {
+      var cached_obj, proposed_obj, status;
+      proposed_obj = {
+        id: id,
+        versions: versions
+      };
+      cached_obj = this.get_from_cache(name, id);
+      if (Flakey.util.deep_compare(proposed_obj, cached_obj) && force_write !== true) {
+        return true;
+      }
+      status = false;
+      $.ajax({
+        async: false,
+        url: this.build_endpoint_url(name, id),
+        data: Flakey.util.querystring.build({
+          id: id,
+          versions: JSON.stringify(versions)
+        }),
+        dataType: 'json',
+        error: function() {
+          return Flakey.status.server_online = false;
+        },
+        success: function() {
+          Flakey.status.server_online = true;
+          return status = true;
+        },
+        type: 'POST'
+      });
+      return status;
+    };
+
+    ServerBackend.prototype.save_to_cache = function(name, id, versions) {
+      this.server_cache[name] = this.server_cache[name] || {};
+      return this.server_cache[name][id] = $.extend(true, {}, {
+        id: id,
+        versions: versions
+      });
+    };
+
+    ServerBackend.prototype["delete"] = function(name, id) {
+      var status;
+      status = false;
+      $.ajax({
+        async: false,
+        url: this.build_endpoint_url(name, id),
+        dataType: 'json',
+        error: function() {
+          return Flakey.status.server_online = false;
+        },
+        success: function() {
+          Flakey.status.server_online = true;
+          return status = true;
+        },
+        type: 'DELETE'
+      });
+      return status;
+    };
+
+    ServerBackend.prototype._query = function(name, query) {
+      throw new TypeError("_query not supported on server backend");
+    };
+
+    ServerBackend.prototype._query_by_id = function(name, id) {
+      throw new TypeError("_query_by_id not supported on server backend");
+    };
+
+    ServerBackend.prototype._read = function(name) {
+      return this.all(name);
+    };
+
+    ServerBackend.prototype._write = function(name, store) {
+      var item, status, _i, _len;
+      status = true;
+      for (_i = 0, _len = store.length; _i < _len; _i++) {
+        item = store[_i];
+        if (!this.save(name, item.id, item.versions)) status = false;
+      }
+      return status;
+    };
+
+    return ServerBackend;
+
+  })(Backend);
+
+  SocketIOBackend = (function(_super) {
+
+    __extends(SocketIOBackend, _super);
+
+    function SocketIOBackend() {
+      var _this = this;
+      this.status = true;
+      this.socket = window.socket = io.connect(Flakey.settings.socketio_server);
+      this.server_cache = {};
+      this.socket.on('sync', function(set) {
+        var name, names, obj, _i, _j, _len, _len2, _ref, _results;
+        names = [];
+        for (_i = 0, _len = set.length; _i < _len; _i++) {
+          obj = set[_i];
+          if (_ref = obj.name, __indexOf.call(names, _ref) < 0) {
+            names.push(obj.name);
+          }
+          _this.save_to_cache(obj.name, obj.id, obj.versions);
+        }
+        _results = [];
+        for (_j = 0, _len2 = names.length; _j < _len2; _j++) {
+          name = names[_j];
+          _results.push(Flakey.models.backend_controller.sync(name));
+        }
+        return _results;
+      });
+      this.socket.emit('fetch_all');
+    }
+
+    SocketIOBackend.prototype.all = function(name) {
+      var id, store, _i, _len, _ref;
+      store = [];
+      this.server_cache[name] = this.server_cache[name] || {};
+      _ref = Object.keys(this.server_cache[name]);
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        id = _ref[_i];
+        store.push(this.get_from_cache(name, id));
+      }
+      return store;
+    };
+
+    SocketIOBackend.prototype.get = function(name, id) {
+      return this.get_from_cache(name, id);
+    };
+
+    SocketIOBackend.prototype.get_from_cache = function(name, id) {
+      if (this.server_cache[name]) {
+        if (this.server_cache[name][id]) return this.server_cache[name][id];
+      }
+    };
+
+    SocketIOBackend.prototype.save = function(name, id, versions, force_write) {
+      var cached_obj, proposed_obj,
+        _this = this;
+      proposed_obj = {
+        id: id,
+        versions: versions
+      };
+      cached_obj = this.get_from_cache(name, id);
+      if (Flakey.util.deep_compare(proposed_obj, cached_obj) && force_write !== true) {
+        return true;
+      }
+      this.socket.emit('write', {
+        name: name,
+        id: id,
+        versions: versions
+      }, function() {
+        return _this.save_to_cache(name, id, versions);
+      });
+      return this.status;
+    };
+
+    SocketIOBackend.prototype.save_to_cache = function(name, id, versions) {
+      this.server_cache[name] = this.server_cache[name] || {};
+      return this.server_cache[name][id] = $.extend(true, {}, {
+        id: id,
+        versions: versions
+      });
+    };
+
+    SocketIOBackend.prototype["delete"] = function(name, id) {
+      this.socket.emit('delete', {
+        name: name,
+        id: id
+      });
+      return this.status;
+    };
+
+    SocketIOBackend.prototype._query = function(name, query) {
+      throw new TypeError("_query not supported on socketio backend");
+    };
+
+    SocketIOBackend.prototype._query_by_id = function(name, id) {
+      throw new TypeError("_query_by_id not supported on socketio backend");
+    };
+
+    SocketIOBackend.prototype._read = function(name) {
+      return this.all(name);
+    };
+
+    SocketIOBackend.prototype._write = function(name, store) {
+      var item, status, _i, _len;
+      status = true;
+      for (_i = 0, _len = store.length; _i < _len; _i++) {
+        item = store[_i];
+        if (!this.save(name, item.id, item.versions)) status = false;
+      }
+      return status;
+    };
+
+    return SocketIOBackend;
+
+  })(Backend);
+
+  Flakey.models = {
+    Model: Model,
+    BackendController: BackendController,
+    backend_controller: null
+  };
+
+  Controller = (function() {
+
+    function Controller(config) {
+      var name, _i, _len, _ref;
+      if (config == null) config = {};
+      this.active = this.active || false;
+      this.actions = this.actions || {};
+      this.id = this.id || '';
+      this.class_name = this.class_name || '';
+      this.parent = this.parent || null;
+      this.container = this.container || null;
+      this.container_html = this.container_html || '';
+      this.subcontrollers = this.subcontrollers || [];
+      this.query_params = this.query_params || {};
+      this.container = $(document.createElement('div'));
+      this.container.html(this.container_html);
+      this.parent = config.parent || Flakey.settings.container;
+      this.parent.append(this.container);
+      this.container.attr('id', this.id);
+      _ref = this.class_name.split(' ');
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        name = _ref[_i];
+        this.container.addClass(name);
       }
     }
-    
-    if Flakey.settings.enabled_local_backend
-      @backends['local'] = {
-        log_key: 'flakey-local-log'
-        pending_log: []
-        interface: new LocalBackend()
-      }
-    
-    if Flakey.settings.base_model_endpoint
-      @backends['server'] = {
-        log_key: 'flakey-server-log'
-        pending_log: []
-        interface: new ServerBackend()
-      }
-      
-    if Flakey.settings.socketio_server
-      @backends['socketio'] = {
-        log_key: 'flakey-socketio-log'
-        pending_log: []
-        interface: new SocketIOBackend()
-      }
-    
-    @read = Flakey.settings.read_backend || 'memory' # Backend to use for read operations
-    @load_logs()
-    
-  # Pass through methods
-  all: (name) ->
-    return @backends[@read].interface.all(name)
-    
-  get: (name, id) ->
-    return @backends[@read].interface.get(name, id)
-    
-  find: (name, query) ->
-    return @backends[@read].interface.find(name, query)
-    
-  save: (name, id, versions, backends = @backends) ->
-    for own bname, backend of backends
-      log_msg = 'save' + @delim + JSON.stringify([name, id, versions])
-      if backend.pending_log.length
-        backend.pending_log.push(log_msg)
-        @commit_logs()
-        @exec_log()
-        return false
-      if not backend.interface.save(name, id, versions)
-        backend.pending_log.push(log_msg)
-        @commit_logs()
-        return false
-    return true
-      
-  delete: (name, id, backends = @backends) ->
-    for own bname, backend of backends
-      log_msg = 'delete' + @delim + JSON.stringify([name, id])
-      if backend.pending_log.length
-        backend.pending_log.push(log_msg)
-        @commit_logs()
-        @exec_log()
-        return false
-      if not backend.interface.delete(name, id)
-        backend.pending_log.push(log_msg)
-        @commit_logs()
-        return false
-    return true
-  
-  # Log methods
-  exec_log: () ->
-    for own name, backend of @backends
-      log = backend.pending_log
-      for msg in log
-        if msg?
-          action = msg.split(@delim)
-          fn = Flakey.models.backend_controller.backends[name].interface[action[0]]
-          params = JSON.parse(action[1])
-          bends = {}
-          bends[name] = backend
-          params.push(bends)
-          if fn.apply(Flakey.models.backend_controller.backends[name].interface, params)
-            backend.pending_log.shift()
-          else
-            break;
-    @commit_logs()
-          
-  commit_logs: (backends = @backends) ->
-    for own name, backend of backends
-      localStorage[backend.log_key] = JSON.stringify(backend.pending_log)
-    return true
-      
-  load_logs: (backends = @backends) ->
-    for own name, backend of backends
-      if not localStorage[backend.log_key]?
-        break;
-      backend.pending_log = JSON.parse(localStorage[backend.log_key])
-    return true
-      
-  # Backend Sync
-  sync: (name, backends = @backends) ->
-    store = {}
-    for own bname, backend of backends
-      for item in backend.interface.all(name)
-        if item.id in Object.keys(store)
-          store[item.id].versions = @merge_version_lists(item.versions, store[item.id].versions)
-        else
-          store[item.id] = item
-    
-    output = []
-    for own key, item of store
-      output.push(item)
-    
-    for own bname, backend of backends
-      backend.interface._write(name, output)
-      
-    # Trigger the saved event
-    event_key = "model_#{ name.toLowerCase() }_updated"
-    Flakey.events.trigger(event_key, undefined)
-          
-  merge_version_lists: (a, b) ->
-    temp = {}
-    for rev in a.concat(b)
-      if rev.time in Object.keys(temp)
-        if rev.id != temp[rev.time].id
-          for own key, value of rev.fields
-             temp[rev.time].fields[key] = value
-        else
-          temp[rev.time] = rev
-      else
-        temp[rev.time] = rev
-    
-    keys = Object.keys(temp)
-    keys.sort((a, b) -> return a - b)
-    
-    output = []
-    for key in keys
-      output.push(temp[key])
-    return output
-    
 
-# Base object for providing persistance to Model objects.
-# This gets extended by other classes for various methods (server, localStorage, etc)
-class Backend
-  # List all objects from the given store
-  all: (name) ->
-    store = @_read(name)
-    if not store
-      return []
-    return store
-  
-  # Get an object from the given store by its id
-  get: (name, id) ->
-    store = @_read(name)
-    index = @_query_by_id(name, id)
-    if index == -1
-      return undefined
-    return store[index]
-  
-  # Find a set of objects from the given store by performing a query on them.
-  # Pass in an object of params to compare, ex: {title: ['eq', 'The Hitchhikers Guide'], vol: ['gt', 2]}
-  # Only looks at the latest version of an object, not any previous revisions
-  find: (name, query) ->
-    store = @_read(name)
-    iset = @_query(name, query)
-    set = []
-    for i in iset
-      set.push(store[i])
-    return set
-  
-  # Save an object to the store  
-  save: (name, id, versions) ->
-    store = @_read(name)
-    if not store
-      store = []
-    index = @_query_by_id(name, id)
-    obj = {
-      id: id,
-      versions: versions
+    Controller.prototype.append = function() {
+      var Contr, contr, _i, _len, _results;
+      _results = [];
+      for (_i = 0, _len = arguments.length; _i < _len; _i++) {
+        Contr = arguments[_i];
+        contr = new Contr({
+          parent: this.parent
+        });
+        _results.push(this.subcontrollers.push(contr));
+      }
+      return _results;
+    };
+
+    Controller.prototype.render = function() {
+      return this.html('');
+    };
+
+    Controller.prototype.bind_actions = function() {
+      var action, fn, key, key_parts, selector, _ref, _results;
+      _ref = this.actions;
+      _results = [];
+      for (key in _ref) {
+        if (!__hasProp.call(_ref, key)) continue;
+        fn = _ref[key];
+        key_parts = key.split(' ');
+        action = key_parts.shift();
+        selector = key_parts.join(' ');
+        _results.push($(selector).bind(action, this[fn]));
+      }
+      return _results;
+    };
+
+    Controller.prototype.unbind_actions = function() {
+      var action, fn, key, key_parts, selector, _ref, _results;
+      _ref = this.actions;
+      _results = [];
+      for (key in _ref) {
+        if (!__hasProp.call(_ref, key)) continue;
+        fn = _ref[key];
+        key_parts = key.split(' ');
+        action = key_parts.shift();
+        selector = key_parts.join(' ');
+        _results.push($(selector).unbind(action));
+      }
+      return _results;
+    };
+
+    Controller.prototype.html = function(htm) {
+      this.container_html = htm;
+      this.container.html(this.container_html);
+      return Flakey.events.trigger('html_updated');
+    };
+
+    Controller.prototype.make_active = function() {
+      var sub, _i, _len, _ref, _results;
+      this.active = true;
+      this.render();
+      this.bind_actions();
+      this.container.removeClass('passive').addClass('active');
+      _ref = this.subcontrollers;
+      _results = [];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        sub = _ref[_i];
+        _results.push(sub.make_active());
+      }
+      return _results;
+    };
+
+    Controller.prototype.make_inactive = function() {
+      var sub, _i, _len, _ref, _results;
+      this.active = false;
+      this.unbind_actions();
+      this.container.removeClass('active').addClass('passive');
+      _ref = this.subcontrollers;
+      _results = [];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        sub = _ref[_i];
+        _results.push(sub.make_inactive());
+      }
+      return _results;
+    };
+
+    Controller.prototype.set_queryparams = function(params) {
+      var sub, _i, _len, _ref, _results;
+      this.query_params = params;
+      _ref = this.subcontrollers;
+      _results = [];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        sub = _ref[_i];
+        _results.push(sub.set_queryparams(params));
+      }
+      return _results;
+    };
+
+    return Controller;
+
+  })();
+
+  Stack = (function() {
+
+    function Stack(config) {
+      var contr, name, _i, _len, _ref, _ref2;
+      if (config == null) config = {};
+      this.resolve = __bind(this.resolve, this);
+      this.id = this.id || '';
+      this.class_name = this.class_name || '';
+      this.active = this.active || false;
+      this.controllers = this.controllers || {};
+      this.routes = this.routes || {};
+      this["default"] = this["default"] || '';
+      this.active_controller = this.active_controller || '';
+      this.parent = this.parent || null;
+      this.query_params = this.query_params || {};
+      this.container = $(document.createElement('div'));
+      this.container.attr('id', this.id);
+      _ref = this.class_name.split(' ');
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        name = _ref[_i];
+        this.container.addClass(name);
+      }
+      this.container.html(this.container_html);
+      this.parent = config.parent || Flakey.settings.container;
+      this.parent.append(this.container);
+      _ref2 = this.controllers;
+      for (name in _ref2) {
+        if (!__hasProp.call(_ref2, name)) continue;
+        contr = _ref2[name];
+        this.controllers[name] = new contr({
+          parent: this.container
+        });
+      }
+      window.addEventListener('hashchange', this.resolve, false);
     }
-    if index == -1
-      store.push(obj)
-    else
-      store[index] = obj
-    return @_write(name, store)
-    
-  # Delete an item by id
-  delete: (name, id) ->
-    store = @_read(name)
-    index = @_query_by_id(name, id)
-    if index == -1
-      return true
-    store.splice(index, 1)
-    return @_write(name, store)
 
-  # Query for index set by performing search
-  # This is SLOW
-  _query: (name, query) ->
-    store = @_read(name)
-    if not store
-      return []
-    set = []
-    i = 0
-    for obj in store
-      rendered = @_render_obj(obj)
-      for own key, value of query
-        if rendered[key] == value
-          set.push(i)
-      i++
-    return set
-  
-  # Query for index by id. Always returns single index, never a set
-  _query_by_id: (name, id) ->
-    store = @_read(name)
-    if not store
-      return -1
-    i = 0
-    for obj in store
-      if obj.id == id
-        return i
-      i++
-    return -1
-  
-  # Render the latest version of an object by evolving it through all its versions
-  _render_obj: (obj) ->
-    output = {}
-    for rev in obj.versions
-      for own key, value of rev.fields
-        if value.constructor == 'Patch'
-          patches = Flakey.diff_patch.patch_fromText(value.patch_text)
-          output[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0]
-        else
-          output[key] = value
-    return output
-    
+    Stack.prototype.resolve = function() {
+      var controller, controller_name, hash, location, name, new_controller, querystring, regex, route, _ref, _ref2;
+      hash = Flakey.util.get_hash();
+      new_controller = void 0;
+      if (hash.length > 0) {
+        if (hash.indexOf('?') !== -1) {
+          hash = hash.split('?');
+          location = hash[0];
+          querystring = hash[1];
+        } else {
+          location = hash;
+          querystring = '';
+        }
+        new_controller = void 0;
+        _ref = this.routes;
+        for (route in _ref) {
+          if (!__hasProp.call(_ref, route)) continue;
+          controller_name = _ref[route];
+          regex = new RegExp(route);
+          if (location.match(route)) new_controller = controller_name;
+        }
+      }
+      if (!new_controller) {
+        window.location.hash = "#" + this["default"];
+        return;
+      }
+      this.active_controller = new_controller;
+      this.controllers[this.active_controller].set_queryparams(Flakey.util.querystring.parse(querystring));
+      _ref2 = this.controllers;
+      for (name in _ref2) {
+        if (!__hasProp.call(_ref2, name)) continue;
+        controller = _ref2[name];
+        if (name !== this.active_controller) {
+          this.controllers[name].make_inactive();
+        }
+      }
+      if (this.active) {
+        this.controllers[this.active_controller].make_active();
+        this.controllers[this.active_controller].render();
+      }
+      return this.controllers[this.active_controller];
+    };
 
-# Virtual Backend that simply stores data in an Object (window.memcache)
-class MemoryBackend extends Backend
-  constructor: () ->
-    if not window.memcache
-      window.memcache = {}
-    
-  _read: (name) ->
-    return window.memcache[name]
-    
-  _write: (name, store) ->
-    window.memcache[name] = store
-    return true
+    Stack.prototype.make_active = function() {
+      this.resolve();
+      if (this.controllers[this.active_controller] !== void 0) {
+        this.controllers[this.active_controller].make_active();
+        this.controllers[this.active_controller].render();
+      }
+      return this.active = true;
+    };
 
+    Stack.prototype.make_inactive = function() {
+      if (this.controllers[this.active_controller] !== void 0) {
+        this.controllers[this.active_controller].make_inactive();
+      }
+      return this.active = false;
+    };
 
-# LocalStorage Backend
-class LocalBackend extends Backend
-  constructor: () ->
-    @prefix = 'flakey-'
-    
-  _read: (name) ->
-    if not localStorage[@prefix + name]
-      localStorage[@prefix + name] = JSON.stringify([])
-    store = JSON.parse(localStorage[@prefix + name])
-    return store
-    
-  _write: (name, store) ->
-    localStorage[@prefix + name] = JSON.stringify(store)
-    return true
-    
+    Stack.prototype.set_queryparams = function(params) {
+      return this.query_params = params;
+    };
 
-# Server storage backend
-class ServerBackend extends Backend
-  constructor: () ->
-    @server_cache = {}
-  
-  build_endpoint_url: (name, id, params) ->
-    url = "#{Flakey.settings.base_model_endpoint}/#{name}"
-    if id? then url += "/#{id}"
-    if params? and params.constructor == Object
-      querystring = Flakey.util.querystring.build(params)
-      url += "?#{querystring}"
-    return url
-    
-  # List all objects from the given store
-  all: (name) ->
-    store = false
-    $.ajax({
-      async: false
-      url: @build_endpoint_url(name)
-      dataType: 'json'
-      error: () ->
-        Flakey.status.server_online = false
-      success: (data) ->
-        Flakey.status.server_online = true
-        store = data
-      type: 'GET'
-    })
+    return Stack;
 
-    (@save_to_cache(name, obj.id, obj.versions) for obj in store)
-    return store
+  })();
 
-  # Get an object from the given store by its id
-  get: (name, id) ->
-    obj = false
-    $.ajax({
-      async: false
-      url: @build_endpoint_url(name, id)
-      dataType: 'json'
-      error: () ->
-        Flakey.status.server_online = false
-      success: (data) ->
-        Flakey.status.server_online = true
-        obj = data
-      type: 'GET'
-    })
+  Flakey.controllers = {
+    Stack: Stack,
+    Controller: Controller
+  };
 
-    @save_to_cache(name, obj.id, obj.versions)
-    return obj
+  Template = (function() {
 
-  # Retreive Object from server cache
-  get_from_cache: (name, id) ->
-    if @server_cache[name]
-      if @server_cache[name][id]
-        return @server_cache[name][id]
-    return undefined
+    function Template(eco, name) {
+      this.eco = eco;
+      this.name = name;
+    }
 
-  # Save an object to the store  
-  save: (name, id, versions, force_write) ->
-    proposed_obj = {id: id, versions: versions}
-    cached_obj = @get_from_cache(name, id)
-    
-    # Compare cached object to proposed save object
-    # Only actually save if they are different, or if force_write flag is true
-    if Flakey.util.deep_compare(proposed_obj, cached_obj) and force_write != true
-      return true
-    
-    # Write objects to server
-    status = false
-    $.ajax({
-      async: false
-      url: @build_endpoint_url(name, id)
-      data: Flakey.util.querystring.build({id: id, versions: JSON.stringify(versions)})
-      dataType: 'json'
-      error: () ->
-        Flakey.status.server_online = false
-      success: () ->
-        Flakey.status.server_online = true
-        status = true
-      type: 'POST'
-    })
-    return status
+    Template.prototype.render = function(context) {
+      if (context == null) context = {};
+      return this.eco(context);
+    };
 
-  # Save object to server_cache
-  save_to_cache: (name, id, versions) ->
-    @server_cache[name] = @server_cache[name] || {}
-    @server_cache[name][id] = $.extend(true, {}, {id: id, versions: versions})
+    return Template;
 
-  # Delete an item by id
-  delete: (name, id) ->
-    status = false
-    $.ajax({
-      async: false
-      url: @build_endpoint_url(name, id)
-      dataType: 'json'
-      error: () ->
-        Flakey.status.server_online = false
-      success: () ->
-        Flakey.status.server_online = true
-        status = true
-      type: 'DELETE'
-    })
-    return status
+  })();
 
-  _query: (name, query) ->
-    throw new TypeError("_query not supported on server backend")
+  get_template = function(name, tobj) {
+    var template;
+    template = tobj.ecoTemplates[name];
+    return new Template(template, name);
+  };
 
-  _query_by_id: (name, id) ->
-    throw new TypeError("_query_by_id not supported on server backend")
-    
-  _read: (name) ->
-    return @all(name)
+  Flakey.templates = {
+    get_template: get_template,
+    Template: Template
+  };
 
-  _write: (name, store) ->
-    status = true
-    for item in store
-      if not @save(name, item.id, item.versions)
-        status = false
-    return status
-    
+  module.exports = Flakey;
 
-# Server storage backend
-class SocketIOBackend extends Backend
-  constructor: () ->
-    @status = true
-    @socket = window.socket = io.connect(Flakey.settings.socketio_server)
-    @server_cache = {}
-    
-    @socket.on 'sync', (set) =>
-      names = []
-      for obj in set
-        if obj.name not in names
-          names.push obj.name
-        @save_to_cache(obj.name, obj.id, obj.versions)
-            
-      for name in names
-        Flakey.models.backend_controller.sync(name)
+}).call(this);
+
+});
+
+require.define("/templates/login.js", function (require, module, exports, __dirname, __filename) {
+(function() {
+  this.ecoTemplates || (this.ecoTemplates = {});
+  this.ecoTemplates["login"] = function(__obj) {
+    if (!__obj) __obj = {};
+    var __out = [], __capture = function(callback) {
+      var out = __out, result;
+      __out = [];
+      callback.call(this);
+      result = __out.join('');
+      __out = out;
+      return __safe(result);
+    }, __sanitize = function(value) {
+      if (value && value.ecoSafe) {
+        return value;
+      } else if (typeof value !== 'undefined' && value != null) {
+        return __escape(value);
+      } else {
+        return '';
+      }
+    }, __safe, __objSafe = __obj.safe, __escape = __obj.escape;
+    __safe = __obj.safe = function(value) {
+      if (value && value.ecoSafe) {
+        return value;
+      } else {
+        if (!(typeof value !== 'undefined' && value != null)) value = '';
+        var result = new String(value);
+        result.ecoSafe = true;
+        return result;
+      }
+    };
+    if (!__escape) {
+      __escape = __obj.escape = function(value) {
+        return ('' + value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      };
+    }
+    (function() {
+      (function() {
       
-    @socket.emit 'fetch_all'
-
-  # List all objects from the given store
-  all: (name) ->
-    store = []
-    @server_cache[name] = @server_cache[name] || {}
-    (store.push(@get_from_cache(name, id)) for id in Object.keys(@server_cache[name]))
-    return store
-
-  # Get an object from the given store by its id
-  get: (name, id) ->
-    return @get_from_cache(name, id)
-
-  # Retreive Object from server cache
-  get_from_cache: (name, id) ->
-    if @server_cache[name]
-      if @server_cache[name][id]
-        return @server_cache[name][id]
-    return undefined
-
-  # Save an object to the store  
-  save: (name, id, versions, force_write) ->
-    proposed_obj = {id: id, versions: versions}
-    cached_obj = @get_from_cache(name, id)
-    
-    # Compare cached object to proposed save object
-    # Only actually save if they are different, or if force_write flag is true
-    if Flakey.util.deep_compare(proposed_obj, cached_obj) and force_write != true
-      return true
-
-    # Write objects to server
-    @socket.emit 'write', {name: name, id: id, versions: versions}, () =>
-      @save_to_cache name, id, versions
-    return @status
-
-  # Save object to server_cache
-  save_to_cache: (name, id, versions) ->
-    @server_cache[name] = @server_cache[name] || {}
-    @server_cache[name][id] = $.extend(true, {}, {id: id, versions: versions})
-
-  # Delete an item by id
-  delete: (name, id) ->
-    @socket.emit('delete', {name: name, id: id})
-    return @status
-
-  _query: (name, query) ->
-    throw new TypeError("_query not supported on socketio backend")
-
-  _query_by_id: (name, id) ->
-    throw new TypeError("_query_by_id not supported on socketio backend")
-
-  _read: (name) ->
-    return @all(name)
-
-  _write: (name, store) ->
-    status = true
-    for item in store
-      if not @save(name, item.id, item.versions)
-        status = false
-    return status
-
-
-Flakey.models = {
-  Model: Model,
-  BackendController: BackendController,
-  backend_controller: null
-}
-
-
-# ==========================================
-# Flakey.js Controllers
-# Craig Weber
-# ==========================================
-  
-class Controller  
-  constructor: (config = {}) ->
-    @active = @active || false
-    @actions = @actions || {}
-    @id = @id || ''
-    @class_name = @class_name || ''
-    @parent = @parent || null
-    @container = @container || null
-    @container_html = @container_html || ''
-    @subcontrollers = @subcontrollers || []
-    @query_params = @query_params || {}
-    
-    @container = $(document.createElement('div'))
-    @container.html(@container_html)
-    @parent = config.parent || Flakey.settings.container
-    @parent.append(@container)
-    
-    @container.attr('id', @id)
-    for name in @class_name.split(' ')
-      @container.addClass(name)
+        __out.push('<div class="box">\n    <form action="" method="POST" id="login_form">\n        <h1>Welcome</h1>\n        <input type="text" name="choose_username" id="choose_username" placeholder="Username" />\n        <input type="submit" value="Login" />\n    </form>\n</div>');
       
-  append: () ->
-    for Contr in arguments
-      contr = new Contr({parent: @parent})
-      @subcontrollers.push(contr)
-    
-  render: () ->
-    @html('')
+      }).call(this);
       
-  bind_actions: () ->
-    for own key, fn of @actions
-      key_parts = key.split(' ')
-      action = key_parts.shift()
-      selector = key_parts.join(' ')
-      $(selector).bind(action, @[fn])
-  
-  unbind_actions: () ->
-    for own key, fn of @actions
-      key_parts = key.split(' ')
-      action = key_parts.shift()
-      selector = key_parts.join(' ')
-      $(selector).unbind(action)
-  
-  html: (htm) ->
-    @container_html = htm
-    @container.html(@container_html)
-    Flakey.events.trigger('html_updated')
-    
-  make_active: () ->
-    @active = true
-    @render()
-    @bind_actions()
-    @container.removeClass('passive').addClass('active')
-    for sub in @subcontrollers
-      sub.make_active()
-    
-  make_inactive: () ->
-    @active = false
-    @unbind_actions()
-    @container.removeClass('active').addClass('passive')
-    for sub in @subcontrollers
-      sub.make_inactive()
+    }).call(__obj);
+    __obj.safe = __objSafe, __obj.escape = __escape;
+    return __out.join('');
+  };
+}).call(this);
+
+});
+
+require.define("/templates/chat.js", function (require, module, exports, __dirname, __filename) {
+(function() {
+  this.ecoTemplates || (this.ecoTemplates = {});
+  this.ecoTemplates["chat"] = function(__obj) {
+    if (!__obj) __obj = {};
+    var __out = [], __capture = function(callback) {
+      var out = __out, result;
+      __out = [];
+      callback.call(this);
+      result = __out.join('');
+      __out = out;
+      return __safe(result);
+    }, __sanitize = function(value) {
+      if (value && value.ecoSafe) {
+        return value;
+      } else if (typeof value !== 'undefined' && value != null) {
+        return __escape(value);
+      } else {
+        return '';
+      }
+    }, __safe, __objSafe = __obj.safe, __escape = __obj.escape;
+    __safe = __obj.safe = function(value) {
+      if (value && value.ecoSafe) {
+        return value;
+      } else {
+        if (!(typeof value !== 'undefined' && value != null)) value = '';
+        var result = new String(value);
+        result.ecoSafe = true;
+        return result;
+      }
+    };
+    if (!__escape) {
+      __escape = __obj.escape = function(value) {
+        return ('' + value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      };
+    }
+    (function() {
+      (function() {
+        var message, user, _i, _j, _len, _len2, _ref, _ref2;
       
-  set_queryparams: (params) ->
-    @query_params = params
-    for sub in @subcontrollers
-      sub.set_queryparams(params)
+        __out.push('<div class="chat-window">\n\t<ol>\n\t\t');
       
+        _ref = this.messages;
+        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+          message = _ref[_i];
+          __out.push('\n\t\t<li title="');
+          __out.push(__sanitize((new Date(message.sent)).toLocaleString()));
+          __out.push('" class="');
+          __out.push(__sanitize(message["class"]));
+          __out.push('">\n\t\t\t<span class="user">');
+          __out.push(__sanitize(message.author));
+          __out.push('</span>\n\t\t\t<span class="message">');
+          __out.push(__sanitize(message.content));
+          __out.push('</span>\n\t\t</li>\n\t\t');
+        }
       
-class Stack
-  constructor: (config = {}) ->
-    @id = @id || ''
-    @class_name = @class_name || ''
-    @active = @active || false
-    @controllers = @controllers || {}
-    @routes = @routes || {}
-    @default = @default || ''
-    @active_controller = @active_controller || ''
-    @parent = @parent || null
-    @query_params = @query_params || {}
-    
-    @container = $(document.createElement('div'))
-    @container.attr('id', @id)
-    for name in @class_name.split(' ')
-      @container.addClass(name)
-    @container.html(@container_html)
-    @parent = config.parent || Flakey.settings.container
-    @parent.append(@container)
-    
-    for own name, contr of @controllers
-      @controllers[name] = new contr({parent: @container})
-    
-    window.addEventListener('hashchange', @resolve, false)
-    
-  resolve: () =>
-    hash = Flakey.util.get_hash()
-    
-    new_controller = undefined
-    if hash.length > 0
-      if hash.indexOf('?') != -1
-        hash = hash.split('?')
-        location = hash[0]
-        querystring = hash[1]
-      else
-        location = hash
-        querystring = ''
-      new_controller = undefined
-      for own route, controller_name of @routes
-        regex = new RegExp(route)
-        if location.match(route)
-          new_controller = controller_name
-    
-    if not new_controller
-      window.location.hash = "##{@default}"
-      return
-    
-    @active_controller = new_controller
-    @controllers[@active_controller].set_queryparams(Flakey.util.querystring.parse(querystring))
-    
-    for own name, controller of @controllers
-      if name != @active_controller
-        @controllers[name].make_inactive()
-        
-    if @active
-      @controllers[@active_controller].make_active()
-      @controllers[@active_controller].render()
-        
-    return @controllers[@active_controller]
-  
-  make_active: () ->
-    @resolve()
-    if @controllers[@active_controller] != undefined
-      @controllers[@active_controller].make_active()
-      @controllers[@active_controller].render()
-    @active = true
-        
-  make_inactive: () ->
-    if @controllers[@active_controller] != undefined
-      @controllers[@active_controller].make_inactive()
-    @active = false
-    
-  set_queryparams: (params) ->
-    @query_params = params
-  
-    
+        __out.push('\n\t<ol>\n</div>\n\n<div class="chat-entry">\n\t<form action="" method="POST" id="message_form">\n\t\t<input type="text" name="new_message" id="new_message" placeholder="Type a message" />\n\t\t<input type="submit" value="Send" />\n\t</form>\n</div>\n\n<div class="users">\n\t<h2>Current Users</h2>\n\t<ul>\n\t\t');
+      
+        _ref2 = this.users;
+        for (_j = 0, _len2 = _ref2.length; _j < _len2; _j++) {
+          user = _ref2[_j];
+          __out.push('\n\t\t<li>');
+          __out.push(__sanitize(user.name));
+          __out.push('</li>\n\t\t');
+        }
+      
+        __out.push('\n\t</ul>\n</div>');
+      
+      }).call(this);
+      
+    }).call(__obj);
+    __obj.safe = __objSafe, __obj.escape = __escape;
+    return __out.join('');
+  };
+}).call(this);
 
-Flakey.controllers = {
-  Stack: Stack,
-  Controller: Controller
-}
+});
 
-# ==========================================
-# Flakey.js Views
-# Craig Weber
-# ==========================================
+require.define("/index.js", function (require, module, exports, __dirname, __filename) {
+    (function() {
+  var $, ChatController, Flakey, LoginController, Message, User, current_user,
+    __hasProp = Object.prototype.hasOwnProperty,
+    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; },
+    __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
 
-class Template
-  constructor: (eco, name) ->
-    @eco = eco
-    @name = name
-    
-  render: (context = {}) ->
-    return @eco(context)
-    
-get_template = (name, tobj) ->
-  template = tobj.ecoTemplates[name]
-  return new Template(template, name)
+  Flakey = require('./flakey');
 
-Flakey.templates = {
-  get_template
-  Template: Template
-}
+  $ = Flakey.$;
 
-# ==========================================
-# Flakey.js Exports
-# Craig Weber
-# ==========================================
+  current_user = void 0;
 
-module.exports = Flakey
+  Message = (function(_super) {
+
+    __extends(Message, _super);
+
+    function Message() {
+      Message.__super__.constructor.apply(this, arguments);
+    }
+
+    Message.model_name = 'Message';
+
+    Message.fields = ['id', 'content', 'author', 'sent', 'class'];
+
+    return Message;
+
+  })(Flakey.models.Model);
+
+  User = (function(_super) {
+
+    __extends(User, _super);
+
+    function User() {
+      User.__super__.constructor.apply(this, arguments);
+    }
+
+    User.model_name = 'User';
+
+    User.fields = ['id', 'name'];
+
+    return User;
+
+  })(Flakey.models.Model);
+
+  LoginController = (function(_super) {
+
+    __extends(LoginController, _super);
+
+    function LoginController(config) {
+      this.config = config;
+      this.submit = __bind(this.submit, this);
+      this.id = 'login';
+      this.class_name = 'login view';
+      this.actions = {
+        'submit #login_form': 'submit'
+      };
+      LoginController.__super__.constructor.call(this, this.config);
+      this.tmpl = Flakey.templates.get_template('login', require('./templates/login'));
+    }
+
+    LoginController.prototype.render = function() {
+      var context;
+      this.unbind_actions();
+      context = {};
+      this.html(this.tmpl.render(context));
+      return this.bind_actions();
+    };
+
+    LoginController.prototype.submit = function(event) {
+      var choosen_name, users,
+        _this = this;
+      event.preventDefault();
+      choosen_name = $('#choose_username').val().replace(/[^a-zA-Z 0-9]+/g, '');
+      if (!choosen_name.length) return;
+      $('#choose_username').val("");
+      users = User.find({
+        name: choosen_name
+      });
+      if (users.length > 0) {
+        alert('That username is already taken.');
+        return;
+      }
+      current_user = new User({
+        name: choosen_name
+      });
+      current_user.save(function() {
+        var chat, message;
+        _this.make_inactive();
+        message = new Message({
+          author: "System",
+          "class": "system-broadcast",
+          content: "" + current_user.name + " has joined the chat. (" + ((new Date).toLocaleString()) + ")",
+          sent: +(new Date())
+        });
+        message.save();
+        chat = new ChatController(_this.config);
+        return chat.make_active();
+      });
+      if (current_user != null) {
+        this.user_socket = io.connect("http://" + window.location.host + "/users");
+        this.user_socket.emit('associate', current_user.id);
+        return this.user_socket.on('delete_user', function(user_id) {
+          var user;
+          user = User.get(user_id);
+          return user["delete"]();
+        });
+      }
+    };
+
+    return LoginController;
+
+  })(Flakey.controllers.Controller);
+
+  ChatController = (function(_super) {
+
+    __extends(ChatController, _super);
+
+    function ChatController(config) {
+      this.send = __bind(this.send, this);
+      var _this = this;
+      this.id = 'chat';
+      this.class_name = 'chat view';
+      this.actions = {
+        'submit #message_form': 'send'
+      };
+      ChatController.__super__.constructor.call(this, config);
+      this.tmpl = Flakey.templates.get_template('chat', require('./templates/chat'));
+      Flakey.events.register('model_message_updated', function() {
+        console.log('rendering (message update)');
+        return _this.render();
+      });
+      Flakey.events.register('model_user_updated', function() {
+        console.log('rendering (user update)');
+        return _this.render();
+      });
+    }
+
+    ChatController.prototype.render = function() {
+      var context;
+      this.unbind_actions();
+      context = {
+        messages: Message.all(),
+        users: User.all()
+      };
+      this.html(this.tmpl.render(context));
+      this.bind_actions();
+      return $('#new_message').focus();
+    };
+
+    ChatController.prototype.send = function(event) {
+      var message;
+      event.preventDefault();
+      message = $('#new_message').val();
+      if (!message.length) return;
+      $('#new_message').val("");
+      message = new Message({
+        author: current_user.name,
+        content: message,
+        sent: +(new Date())
+      });
+      return message.save();
+    };
+
+    return ChatController;
+
+  })(Flakey.controllers.Controller);
+
+  $(document).ready(function() {
+    var login, settings;
+    settings = {
+      container: $('body'),
+      socketio_server: 'http://localhost/models',
+      enabled_local_backend: false
+    };
+    Flakey.init(settings);
+    Flakey.models.backend_controller.sync('Message');
+    Flakey.models.backend_controller.sync('User');
+    window.Message = Message;
+    window.User = User;
+    login = new LoginController();
+    return login.make_active();
+  });
+
+}).call(this);
+
+});
+require("/index.js");

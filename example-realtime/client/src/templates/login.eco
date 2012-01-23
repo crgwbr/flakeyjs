@@ -1,0 +1,7 @@
+<div class="box">
+    <form action="" method="POST" id="login_form">
+        <h1>Welcome</h1>
+        <input type="text" name="choose_username" id="choose_username" placeholder="Username" />
+        <input type="submit" value="Login" />
+    </form>
+</div>

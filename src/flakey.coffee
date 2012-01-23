@@ -10,6 +10,8 @@ Flakey = {
     container: undefined
     read_backend: 'memory'
     base_model_endpoint: null #'/api'
+    socketio_server: null
+    enabled_local_backend: true
   }
   status: {
     server_online: undefined 
