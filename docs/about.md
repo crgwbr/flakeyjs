@@ -1,31 +1,7 @@
-# Flakey.js Overview
+## About
 
-### What's Flakey.js?
-Flakey.js is a (yet another) Javascript MVC framework with an emphasis on Model reliability. Flakey.js is targeted towards mobile platforms where solid server connections are not often possible.
+Flakey.js was written by [Craig Weber](http://crgwbr.com) in his spare time, fueled mainly by coffee. Flakey.js was largely inspired by the fantastic [Spine.js](http://spinejs.com/) framework, which is great for apps that don't work well with Flakey's built in model versioning, or that require a more relational model structure.
 
-Traditionally working with data inside a web app, for example writing an email or long document, can be dangerous when the internet connection is intermittent. Entire documents can easily be lost. Flakey.js aims to fix this.
+You can follow Craig Weber on [Twitter](http://twitter.com/crgwbr) or email him at [craig@crgwbr.com](mailto:craig@crgwbr.com).
 
-### Why shouldn't I just use [ligament.js](https://gist.github.com/313496e6ba9160dc6eb5)?
-Unlike most Javascript MVC frameworks, data in Flakey.js is more than just a hash table representing the models most current state. Instead, a model exists as a set of instructions on how to build it's most current state. Therefore, any transaction of change in the model can be rolled back, and history can easily be viewed. This is ideal for applications with relatively small datasets (note taking apps, personal wiki's, todo lists) where the data itself is more important than raw performance.
-
-* * * * *
-
-### Building an app based on Flakey.js
-The recommended way to build apps with Flakey.js is to write your app in [Coffeescript](http://coffeescript.org/) and use [Browserify](https://github.com/substack/node-browserify) to bundle Flakey.coffee, your app, and other dependancies into a single file. An example of how to do this is found in example/ of Flakey's git repository.
-
-* * * * *
-
-### Compiling Flakey.js
-To compile Flakey.js from source:
-
-- nodejs
-- npm (normally installed with nodejs)
-- cake (normally installed with nodejs)
-- coffeescript (`npm install -g coffee-script`)
-
-To compile the sample note taking app (example/*), all of the above plus:
-
-- browserify (`npm install browserify`)
-- eco (`npm install -g eco`)
-
-To build Flakey.js, cd to the root of the repository and run: `cake build`. That will concat the files in `src/` into flakey.coffee. Then flakey.coffee is compiled into flakey.js, and finally minified into flakey.min.js using Google's closure compiler.
+Flakey.js is open-source and available under the ISC License. You can contribute to Flakey by forking the repository on [Github](https://github.com/crgwbr/flakeyjs) and submitting pull requests. You can also submit Issues using Github's awesome [Issue tracker](https://github.com/crgwbr/flakeyjs/issues).
