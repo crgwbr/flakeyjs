@@ -20,7 +20,9 @@ $(document).ready () ->
   Flakey.models.backend_controller.sync('Person')
   
   
-  # Model Testing
+  # ========================================================================================
+  # Model Tests
+  # ========================================================================================
   module "Models"
   
   bdfl = new Person {

@@ -1,5 +1,5 @@
 # ==========================================
-# Compiled: Wed Jan 11 2012 14:26:07 GMT-0500 (EST)
+# Compiled: Wed Feb 01 2012 21:26:44 GMT-0500 (EST)
 
 # Contents:
 #   - src/lib/diff_match_patch.js
@@ -11968,6 +11968,8 @@ Flakey = {
     container: undefined
     read_backend: 'memory'
     base_model_endpoint: null #'/api'
+    socketio_server: null
+    enabled_local_backend: true
   }
   status: {
     server_online: undefined 
@@ -11998,6 +12000,10 @@ if window
 
 
 Flakey.util = {
+  # Run function asynchronously
+  async: (fn) ->
+    setTimeout(fn, 0)
+    
   # Deep Compare 2 objects
   # Return true if they are equal
   deep_compare: (a, b) ->
@@ -12115,14 +12121,14 @@ class Events
     @events[namespace][event].push(fn)
     return @events[namespace][event]
     
-  trigger: (event, namespace = 'flakey') ->
+  trigger: (event, namespace = 'flakey', data = {}) ->
     if @events[namespace] == undefined
       @events[namespace] = {}
     if @events[namespace][event] == undefined
       return
     output = []
     for fn in @events[namespace][event]
-      output.push(fn())
+      output.push(fn(event, namespace, data))
     return output
     
   clear: (namespace = 'flakey') ->
@@ -12141,9 +12147,12 @@ class Model
   @model_name: null
   @fields: ['id']
   
-  constructor: () ->
+  constructor: (init_values) ->
     @id = Flakey.util.guid()
     @versions = []
+    
+    for own key, value of init_values
+      @[key] = value
   
   # Get all objects
   @all: () ->
@@ -12156,6 +12165,8 @@ class Model
     
   delete: () ->
     Flakey.models.backend_controller.delete(@constructor.model_name, @id)
+    event_key = "model_#{ @constructor.model_name.toLowerCase() }_updated"
+    Flakey.events.trigger(event_key, undefined)
     
   diff: (new_obj, old_obj) ->
     save = {}
@@ -12234,6 +12245,9 @@ class Model
     @id = obj.id
     for own key, value of @evolve()
       @[key] = value
+      
+  pop_version: () ->
+    @versions.pop()
     
   push_version: (diff) ->
     version_id = Flakey.util.guid()
@@ -12245,14 +12259,26 @@ class Model
     Object.freeze(version)
     @versions.push(version)
     
-  save: () ->
+  save: (callback) ->
     new_obj = @export()
     old_obj = @evolve()
     diff = @diff(new_obj, old_obj)
     # Don't save empty versions
     if Object.keys(diff).length > 0
       @push_version(diff)
+      @write(callback)
+    else if callback?
+      callback()
+    return true
+    
+  write: (callback) ->
+    # Run this asynchronously so that server traffic doesn't lock the UI
+    Flakey.util.async () =>
       Flakey.models.backend_controller.save(@constructor.model_name, @id, @versions)
+      if callback? then callback()
+      # Trigger the saved event
+      event_key = "model_#{ @constructor.model_name.toLowerCase() }_updated"
+      Flakey.events.trigger(event_key, undefined)
 
 
 class BackendController
@@ -12264,18 +12290,27 @@ class BackendController
         pending_log: []
         interface: new MemoryBackend()
       }
-      local: {
+    }
+    
+    if Flakey.settings.enabled_local_backend
+      @backends['local'] = {
         log_key: 'flakey-local-log'
         pending_log: []
         interface: new LocalBackend()
       }
-    }
     
     if Flakey.settings.base_model_endpoint
       @backends['server'] = {
         log_key: 'flakey-server-log'
         pending_log: []
         interface: new ServerBackend()
+      }
+      
+    if Flakey.settings.socketio_server
+      @backends['socketio'] = {
+        log_key: 'flakey-socketio-log'
+        pending_log: []
+        interface: new SocketIOBackend()
       }
     
     @read = Flakey.settings.read_backend || 'memory' # Backend to use for read operations
@@ -12324,16 +12359,17 @@ class BackendController
     for own name, backend of @backends
       log = backend.pending_log
       for msg in log
-        action = msg.split(@delim)
-        fn = Flakey.models.backend_controller.backends[name].interface[action[0]]
-        params = JSON.parse(action[1])
-        bends = {}
-        bends[name] = backend
-        params.push(bends)
-        if fn.apply(Flakey.models.backend_controller.backends[name].interface, params)
-          backend.pending_log.shift()
-        else
-          break;
+        if msg?
+          action = msg.split(@delim)
+          fn = Flakey.models.backend_controller.backends[name].interface[action[0]]
+          params = JSON.parse(action[1])
+          bends = {}
+          bends[name] = backend
+          params.push(bends)
+          if fn.apply(Flakey.models.backend_controller.backends[name].interface, params)
+            backend.pending_log.shift()
+          else
+            break;
     @commit_logs()
           
   commit_logs: (backends = @backends) ->
@@ -12364,6 +12400,10 @@ class BackendController
     
     for own bname, backend of backends
       backend.interface._write(name, output)
+      
+    # Trigger the saved event
+    event_key = "model_#{ name.toLowerCase() }_updated"
+    Flakey.events.trigger(event_key, undefined)
           
   merge_version_lists: (a, b) ->
     temp = {}
@@ -12513,6 +12553,9 @@ class LocalBackend extends Backend
 
 # Server storage backend
 class ServerBackend extends Backend
+  constructor: () ->
+    @server_cache = {}
+  
   build_endpoint_url: (name, id, params) ->
     url = "#{Flakey.settings.base_model_endpoint}/#{name}"
     if id? then url += "/#{id}"
@@ -12535,6 +12578,8 @@ class ServerBackend extends Backend
         store = data
       type: 'GET'
     })
+
+    (@save_to_cache(name, obj.id, obj.versions) for obj in store)
     return store
 
   # Get an object from the given store by its id
@@ -12551,10 +12596,28 @@ class ServerBackend extends Backend
         obj = data
       type: 'GET'
     })
+
+    @save_to_cache(name, obj.id, obj.versions)
     return obj
 
+  # Retreive Object from server cache
+  get_from_cache: (name, id) ->
+    if @server_cache[name]
+      if @server_cache[name][id]
+        return @server_cache[name][id]
+    return undefined
+
   # Save an object to the store  
-  save: (name, id, versions) ->
+  save: (name, id, versions, force_write) ->
+    proposed_obj = {id: id, versions: versions}
+    cached_obj = @get_from_cache(name, id)
+    
+    # Compare cached object to proposed save object
+    # Only actually save if they are different, or if force_write flag is true
+    if Flakey.util.deep_compare(proposed_obj, cached_obj) and force_write != true
+      return true
+    
+    # Write objects to server
     status = false
     $.ajax({
       async: false
@@ -12569,6 +12632,11 @@ class ServerBackend extends Backend
       type: 'POST'
     })
     return status
+
+  # Save object to server_cache
+  save_to_cache: (name, id, versions) ->
+    @server_cache[name] = @server_cache[name] || {}
+    @server_cache[name][id] = $.extend(true, {}, {id: id, versions: versions})
 
   # Delete an item by id
   delete: (name, id) ->
@@ -12592,6 +12660,85 @@ class ServerBackend extends Backend
   _query_by_id: (name, id) ->
     throw new TypeError("_query_by_id not supported on server backend")
     
+  _read: (name) ->
+    return @all(name)
+
+  _write: (name, store) ->
+    status = true
+    for item in store
+      if not @save(name, item.id, item.versions)
+        status = false
+    return status
+    
+
+# Server storage backend
+class SocketIOBackend extends Backend
+  constructor: () ->
+    @status = true
+    @socket = window.socket = io.connect(Flakey.settings.socketio_server)
+    @server_cache = {}
+    
+    @socket.on 'sync', (set) =>
+      names = []
+      for obj in set
+        if obj.name not in names
+          names.push obj.name
+        @save_to_cache(obj.name, obj.id, obj.versions)
+            
+      for name in names
+        Flakey.models.backend_controller.sync(name)
+      
+    @socket.emit 'fetch_all'
+
+  # List all objects from the given store
+  all: (name) ->
+    store = []
+    @server_cache[name] = @server_cache[name] || {}
+    (store.push(@get_from_cache(name, id)) for id in Object.keys(@server_cache[name]))
+    return store
+
+  # Get an object from the given store by its id
+  get: (name, id) ->
+    return @get_from_cache(name, id)
+
+  # Retreive Object from server cache
+  get_from_cache: (name, id) ->
+    if @server_cache[name]
+      if @server_cache[name][id]
+        return @server_cache[name][id]
+    return undefined
+
+  # Save an object to the store  
+  save: (name, id, versions, force_write) ->
+    proposed_obj = {id: id, versions: versions}
+    cached_obj = @get_from_cache(name, id)
+    
+    # Compare cached object to proposed save object
+    # Only actually save if they are different, or if force_write flag is true
+    if Flakey.util.deep_compare(proposed_obj, cached_obj) and force_write != true
+      return true
+
+    # Write objects to server
+    @socket.emit 'write', {name: name, id: id, versions: versions}, () =>
+      @save_to_cache name, id, versions
+    return @status
+
+  # Save object to server_cache
+  save_to_cache: (name, id, versions) ->
+    @server_cache[name] = @server_cache[name] || {}
+    @server_cache[name][id] = $.extend(true, {}, {id: id, versions: versions})
+
+  # Delete an item by id
+  delete: (name, id) ->
+    @socket.emit('delete', {name: name, id: id})
+    return @status
+
+  _query: (name, query) ->
+    throw new TypeError("_query not supported on socketio backend")
+
+  _query_by_id: (name, id) ->
+    throw new TypeError("_query_by_id not supported on socketio backend")
+
   _read: (name) ->
     return @all(name)
 

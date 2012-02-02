@@ -1,5 +1,5 @@
 # ==========================================
-# Compiled: Sun Jan 22 2012 19:59:49 GMT-0500 (EST)
+# Compiled: Wed Feb 01 2012 21:26:44 GMT-0500 (EST)
 
 # Contents:
 #   - src/lib/diff_match_patch.js
@@ -12266,16 +12266,19 @@ class Model
     # Don't save empty versions
     if Object.keys(diff).length > 0
       @push_version(diff)
-      # Run this asynchronously so that server traffic doesn't lock the UI
-      Flakey.util.async () =>
-        Flakey.models.backend_controller.save(@constructor.model_name, @id, @versions)
-        if callback? then callback()
-        # Trigger the saved event
-        event_key = "model_#{ @constructor.model_name.toLowerCase() }_updated"
-        Flakey.events.trigger(event_key, undefined)
+      @write(callback)
     else if callback?
       callback()
     return true
+    
+  write: (callback) ->
+    # Run this asynchronously so that server traffic doesn't lock the UI
+    Flakey.util.async () =>
+      Flakey.models.backend_controller.save(@constructor.model_name, @id, @versions)
+      if callback? then callback()
+      # Trigger the saved event
+      event_key = "model_#{ @constructor.model_name.toLowerCase() }_updated"
+      Flakey.events.trigger(event_key, undefined)
 
 
 class BackendController

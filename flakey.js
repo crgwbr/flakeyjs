@@ -12299,24 +12299,28 @@ if (!JSON) {
     };
 
     Model.prototype.save = function(callback) {
-      var diff, new_obj, old_obj,
-        _this = this;
+      var diff, new_obj, old_obj;
       new_obj = this["export"]();
       old_obj = this.evolve();
       diff = this.diff(new_obj, old_obj);
       if (Object.keys(diff).length > 0) {
         this.push_version(diff);
-        Flakey.util.async(function() {
-          var event_key;
-          Flakey.models.backend_controller.save(_this.constructor.model_name, _this.id, _this.versions);
-          if (callback != null) callback();
-          event_key = "model_" + (_this.constructor.model_name.toLowerCase()) + "_updated";
-          return Flakey.events.trigger(event_key, void 0);
-        });
+        this.write(callback);
       } else if (callback != null) {
         callback();
       }
       return true;
+    };
+
+    Model.prototype.write = function(callback) {
+      var _this = this;
+      return Flakey.util.async(function() {
+        var event_key;
+        Flakey.models.backend_controller.save(_this.constructor.model_name, _this.id, _this.versions);
+        if (callback != null) callback();
+        event_key = "model_" + (_this.constructor.model_name.toLowerCase()) + "_updated";
+        return Flakey.events.trigger(event_key, void 0);
+      });
     };
 
     return Model;
