@@ -13,10 +13,21 @@ appFiles  = [
   'exports.coffee'
 ]
 
-VERSION = "0.0.1"
+DEFAULT_VERSION = "0.0.1"
+
+option '-v', '--version [STRING]', 'Version number of build'
+
+task 'build', 'Compile flakey.js from source', (options) ->
+  version = options.version or DEFAULT_VERSION
+  build_flakey(version)
+
+task 'build_package', 'Build a standard NPM package', (options) ->
+  version = options.version or DEFAULT_VERSION
+  build_npm(version)
 
 
-task 'build', 'Compile flakey.js from source', ()->
+# Concat and build Flakey.js from source
+build_flakey = (version) ->
   appContents = new Array remaining = appFiles.length
   for file, index in appFiles then do (file, index) ->
     fs.readFile "src/#{file}", 'utf8', (err, fileContents) ->
@@ -26,9 +37,10 @@ task 'build', 'Compile flakey.js from source', ()->
       else
         appContents[index] = fileContents
       process() if --remaining is 0
+      
   process = ->
     header = "# ==========================================\n"
-    header += "# Version: #{VERSION}\n"
+    header += "# Version: #{ version }\n"
     header += "# Compiled: #{(new Date()).toString()}\n\n"
     header += "# Contents:\n"
     for file, index in appFiles
@@ -44,6 +56,36 @@ task 'build', 'Compile flakey.js from source', ()->
         console.log stdout + stderr
         closureCompile () ->
           console.log "Done compiling flakey.js & flakey.min.js"
+          
+          
+# Build an NPM package in the npm-package directory
+build_npm = (version) ->  
+  JSON = require('json2ify')
+  
+  exec 'rm -rf npm-package; mkdir npm-package; cp flakey.js npm-package/flakey.js', (err, stdout, stderr) ->
+    throw err if err
+    console.log stdout + stderr
+    
+    package = {
+      "name": "flakey",
+      "description": "Flakey.js MVC Framework for browsers",
+      "version": version,
+      "repository": {
+        "type": "git",
+        "url": "git@github.com:crgwbr/flakeyjs.git"
+      },
+      "author": "Craig Weber <crgwbr@gmail.com>",
+      "engines": {
+        "node": "*"
+      },
+      "main": "./flakey.js"
+    }
+    
+    package_file = JSON.stringify(package)
+    
+    fs.writeFile 'npm-package/package.json', package_file, 'utf8', (err) ->
+      throw err if err
+      console.log "Done. Compiled npm-package at version #{ version }."
           
           
 # Compile full version of code
@@ -64,35 +106,6 @@ closureCompile = (callback) ->
     # Output compilation message and return
     console.log stdout + stderr
     callback()
-
-# Build an NPM package in the npm-package directory
-task 'build_package', 'Build a standard NPM package', () ->
-  JSON = require('json2ify')
-  
-  exec 'rm -rf npm-package; mkdir npm-package; cp flakey.js npm-package/flakey.js', (err, stdout, stderr) ->
-    throw err if err
-    console.log stdout + stderr
-    
-    package = {
-      "name": "flakey",
-      "description": "Flakey.js MVC Framework for browsers",
-      "version": VERSION,
-      "repository": {
-        "type": "git",
-        "url": "git@github.com:crgwbr/flakeyjs.git"
-      },
-      "author": "Craig Weber <crgwbr@gmail.com>",
-      "engines": {
-        "node": "*"
-      },
-      "main": "./flakey.js"
-    }
-    
-    package_file = JSON.stringify(package)
-    
-    fs.writeFile 'npm-package/package.json', package_file, 'utf8', (err) ->
-      throw err if err
-      console.log 'Done. Compiled npm-package.'
   
   
   
