@@ -13,12 +13,10 @@ appFiles  = [
   'exports.coffee'
 ]
 
-lint_files = [
-  'flakey.js'
-]
+VERSION = "0.0.1"
 
 
-task 'build', 'Compile flakey.js from source', ->
+task 'build', 'Compile flakey.js from source', ()->
   appContents = new Array remaining = appFiles.length
   for file, index in appFiles then do (file, index) ->
     fs.readFile "src/#{file}", 'utf8', (err, fileContents) ->
@@ -30,6 +28,7 @@ task 'build', 'Compile flakey.js from source', ->
       process() if --remaining is 0
   process = ->
     header = "# ==========================================\n"
+    header += "# Version: #{VERSION}\n"
     header += "# Compiled: #{(new Date()).toString()}\n\n"
     header += "# Contents:\n"
     for file, index in appFiles
@@ -45,73 +44,8 @@ task 'build', 'Compile flakey.js from source', ->
         console.log stdout + stderr
         closureCompile () ->
           console.log "Done compiling flakey.js & flakey.min.js"
-
-
-
-task 'lint', 'Run Google\' style checker on source files', ->
-  # Check if lint exists
-  exec "which gjslint", (error, stdout, stderr) ->
-    if error
-      console.error "Please install closure linter:"
-      console.error "http://code.google.com/closure/utilities/docs/linter_howto.html"
-      return
-
-    files = lint_files
-
-    handleFile = ->
-      return if files.length == 0
-      file = files.shift()
-      exec "gjslint #{file}", (error, stdout, stderr) ->
-        if error
-          console.error stderr
-          console.error stdout
-          console.error "#{files.length} files left to lint"
-          return
-
-        if stdout != ''
-          console.log stdout
-
-        # Recurse
-        handleFile()
-
-    # Kick off first file
-    handleFile()
-    
-
-
-task 'fixlint', 'Run automatic lint fixer on all source files', ->
-  # Check if lint exists
-  exec "which fixjsstyle", (error, stdout, stderr) ->
-    if error
-      console.error "Please install closure linter:"
-      console.error "http://code.google.com/closure/utilities/docs/linter_howto.html"
-      return
-
-    files = lint_files
-
-    console.log "Fixing lint in #{files.length} files"
-    handleFile = ->
-      return if files.length == 0
-      file = files.shift()
-      exec "fixjsstyle #{file}", (error, stdout, stderr) ->
-        if error
-          console.error stderr if stderr != ''
-          console.error stdout if stdout != ''
-          console.error "#{files.length} files left to fix"
-          return
-
-        console.log stdout if stdout != ''
-
-        if files.length
-          console.log "#{files.length} files remaining"
-          # Recurse
-          handleFile()
-
-    # Kick off first file
-    handleFile()
-  
-  
-  
+          
+          
 # Compile full version of code
 closureCompile = (callback) ->
   # Standard options for ornery compilation
@@ -120,8 +54,7 @@ closureCompile = (callback) ->
           --compilation_level=WHITESPACE_ONLY
           --warning_level=VERBOSE
           --summary_detail_level=3
-          --language_in ECMASCRIPT5_STRICT
-          "
+          --language_in ECMASCRIPT5_STRICT"
 
   exec "java -jar 'tools/closure/compiler.jar' #{args}", { maxBuffer: 1000 * 1024 }, (error, stdout, stderr) ->
     if error
@@ -131,4 +64,37 @@ closureCompile = (callback) ->
     # Output compilation message and return
     console.log stdout + stderr
     callback()
-      
+
+# Build an NPM package in the npm-package directory
+task 'build_package', 'Build a standard NPM package', () ->
+  JSON = require('json2ify')
+  
+  exec 'rm -rf npm-package; mkdir npm-package; cp flakey.js npm-package/flakey.js', (err, stdout, stderr) ->
+    throw err if err
+    console.log stdout + stderr
+    
+    package = {
+      "name": "flakey",
+      "description": "Flakey.js MVC Framework for browsers",
+      "version": VERSION,
+      "repository": {
+        "type": "git",
+        "url": "git@github.com:crgwbr/flakeyjs.git"
+      },
+      "author": "Craig Weber <crgwbr@gmail.com>",
+      "engines": {
+        "node": "*"
+      },
+      "main": "./flakey.js"
+    }
+    
+    package_file = JSON.stringify(package)
+    
+    fs.writeFile 'npm-package/package.json', package_file, 'utf8', (err) ->
+      throw err if err
+      console.log 'Done. Compiled npm-package.'
+  
+  
+  
+  
+  

@@ -1,5 +1,6 @@
 # ==========================================
-# Compiled: Wed Feb 01 2012 21:26:44 GMT-0500 (EST)
+# Version: 0.0.1
+# Compiled: Sat Feb 04 2012 12:26:56 GMT-0500 (EST)
 
 # Contents:
 #   - src/lib/diff_match_patch.js
