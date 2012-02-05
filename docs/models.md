@@ -63,11 +63,11 @@ First lets add some data so that we have a history to play with:
 
 Now that we have a few versions, we can start to use nifty features of Flakey.js:
     
-    # Rollback grocerys to before we added 'cheese' to the list 
+    # Get a view of grocerys to before we added 'cheese' to the list 
     # inital save == version 0, so we want version 1
     i = 1
     time = new Date(note.versions[i].time)
-    rev = note.evolve(grocerys.versions[i].version_id)
+    rev = grocerys.evolve(grocerys.versions[i].version_id)
     
     console.log time        # The timestamp of when this version was created
     
@@ -77,13 +77,14 @@ Now that we have a few versions, we can start to use nifty features of Flakey.js
                             #  - Milk
                             #  - Eggs"
                             
-That code lets us non-destructively look at a model instance's past, but what if we want to completely destroy the model current state and rollback to the last version? That's even easier:
+That code lets us non-destructively look at a model instance's past without altering the actual model. What if we want to completely destroy the model current state and rollback to the last version? That's even easier:
 
     # Destroy the latest version
-    grocerys.pop_version()
-    groceries.write()
+    # rollback() can accept an integer (rollback N versions) or a
+    # version_id (rollback to that version)
+    grocerys.rollback(1)
     
-This snippet pops the latest version from the array and writes it to the enabled storage backends. Note that we call write() here instead of save(). That is because save() is designed to create a *new* version by running a diff on the model fields. Since we don't want to do that here, we call the lower level write() method to directly write the version history to the backends.
+This snippet pops the latest version from the array and writes it to the enabled storage backends. Please note: Calling rollback() is *not* reversible. It is destructive to any of the versions its deleting, and therefore potentially very dangerous. Please take care when using it.
 
 
 

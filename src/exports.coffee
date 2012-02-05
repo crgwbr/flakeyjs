@@ -3,4 +3,5 @@
 # Craig Weber
 # ==========================================
 
+module = {}
 module.exports = Flakey

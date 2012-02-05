@@ -1,6 +1,6 @@
 # ==========================================
 # Version: 0.0.2
-# Compiled: Sat Feb 04 2012 13:01:48 GMT-0500 (EST)
+# Compiled: Sun Feb 05 2012 10:59:07 GMT-0500 (EST)
 
 # Contents:
 #   - src/lib/diff_match_patch.js
@@ -12198,11 +12198,14 @@ class Model
       obj[field] = @[field]
     return obj
     
-  evolve: (version_id) ->
+  evolve: (version_id, versions) ->
     obj = {}
-    saved = Flakey.models.backend_controller.get(@constructor.model_name, @id)
-    versions = if saved? then saved.versions else {}
     
+    if versions == undefined or versions.constructor != Array
+      saved = Flakey.models.backend_controller.get(@constructor.model_name, @id)
+      versions = if saved? then saved.versions else {}
+    
+    # Load Fields
     for rev in versions
       for own key, value of rev.fields
         switch value.constructor
@@ -12244,11 +12247,18 @@ class Model
   import: (obj) ->
     @versions = obj.versions
     @id = obj.id
-    for own key, value of @evolve()
+    
+    # Reset fields
+    for key in @constructor.fields
+      @[key] = undefined
+    
+    # Load new fields
+    for own key, value of @evolve(undefined, @versions)
       @[key] = value
       
   pop_version: () ->
-    @versions.pop()
+    if @versions.length > 0
+      @versions.pop()
     
   push_version: (diff) ->
     version_id = Flakey.util.guid()
@@ -12259,6 +12269,30 @@ class Model
     }
     Object.freeze(version)
     @versions.push(version)
+    
+  rollback: (version_id) ->
+    if parseInt(version_id) < @versions.length
+      # Rollback X number of versions
+      for i in Array(parseInt(version_id))
+        @pop_version()
+    else
+      # Rollback to a version
+      exists = false
+      for version in @versions
+        if version.version_id == version_id
+          exists = true
+      if not exists
+        throw new ReferenceError("Version #{ version_id } does not exist.")
+      
+      latest = @versions[@versions.length - 1]
+      while latest.version_id != version_id and @versions.length > 1
+        @pop_version()
+    
+    @import {
+      id: @id
+      versions: @versions
+    }
+    @write()
     
   save: (callback) ->
     new_obj = @export()
@@ -12941,4 +12975,5 @@ Flakey.templates = {
 # Craig Weber
 # ==========================================
 
+module = {}
 module.exports = Flakey
