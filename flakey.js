@@ -11939,7 +11939,7 @@ if (!JSON) {
         };
     }
 }());;
-  var $, Backend, BackendController, Controller, Events, Flakey, JSON, LocalBackend, MemoryBackend, Model, ServerBackend, SocketIOBackend, Stack, Template, get_template, module,
+  var $, Backend, BackendController, Controller, Events, Flakey, JSON, LocalBackend, MemoryBackend, Model, ServerBackend, SocketIOBackend, Stack, Template, get_template,
     __hasProp = Object.prototype.hasOwnProperty,
     __indexOf = Array.prototype.indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; },
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; },
@@ -11975,8 +11975,6 @@ if (!JSON) {
     }
     return Flakey.models.backend_controller = new Flakey.models.BackendController();
   };
-
-  if (window) window.Flakey = Flakey;
 
   Flakey.util = {
     async: function(fn) {
@@ -12162,11 +12160,78 @@ if (!JSON) {
       return set;
     };
 
+    Model.find = function(query) {
+      var ar, item, m, set, _i, _len;
+      ar = Flakey.models.backend_controller.find(this.model_name, query);
+      if (!ar.length) return [];
+      set = [];
+      for (_i = 0, _len = ar.length; _i < _len; _i++) {
+        item = ar[_i];
+        m = new this();
+        m["import"](item);
+        set.push(m);
+      }
+      return set;
+    };
+
+    Model.get = function(id) {
+      var m, obj;
+      obj = Flakey.models.backend_controller.get(this.model_name, id);
+      if (!obj) return;
+      m = new this();
+      m["import"](obj);
+      return m;
+    };
+
     Model.prototype["delete"] = function() {
       var event_key;
       Flakey.models.backend_controller["delete"](this.constructor.model_name, this.id);
       event_key = "model_" + (this.constructor.model_name.toLowerCase()) + "_updated";
       return Flakey.events.trigger(event_key, void 0);
+    };
+
+    Model.prototype.rollback = function(version_id) {
+      var exists, i, latest, version, _i, _j, _len, _len2, _ref, _ref2;
+      if (parseInt(version_id) < this.versions.length) {
+        _ref = Array(parseInt(version_id));
+        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+          i = _ref[_i];
+          this.pop_version();
+        }
+      } else {
+        exists = false;
+        _ref2 = this.versions;
+        for (_j = 0, _len2 = _ref2.length; _j < _len2; _j++) {
+          version = _ref2[_j];
+          if (version.version_id === version_id) exists = true;
+        }
+        if (!exists) {
+          throw new ReferenceError("Version " + version_id + " does not exist.");
+        }
+        latest = this.versions[this.versions.length - 1];
+        while (latest.version_id !== version_id && this.versions.length > 1) {
+          this.pop_version();
+        }
+      }
+      this["import"]({
+        id: this.id,
+        versions: this.versions
+      });
+      return this.write();
+    };
+
+    Model.prototype.save = function(callback) {
+      var diff, new_obj, old_obj;
+      new_obj = this["export"]();
+      old_obj = this.evolve();
+      diff = this.diff(new_obj, old_obj);
+      if (Object.keys(diff).length > 0) {
+        this.push_version(diff);
+        this.write(callback);
+      } else if (callback != null) {
+        callback();
+      }
+      return true;
     };
 
     Model.prototype.diff = function(new_obj, old_obj) {
@@ -12247,29 +12312,6 @@ if (!JSON) {
       return obj;
     };
 
-    Model.find = function(query) {
-      var ar, item, m, set, _i, _len;
-      ar = Flakey.models.backend_controller.find(this.model_name, query);
-      if (!ar.length) return [];
-      set = [];
-      for (_i = 0, _len = ar.length; _i < _len; _i++) {
-        item = ar[_i];
-        m = new this();
-        m["import"](item);
-        set.push(m);
-      }
-      return set;
-    };
-
-    Model.get = function(id) {
-      var m, obj;
-      obj = Flakey.models.backend_controller.get(this.model_name, id);
-      if (!obj) return;
-      m = new this();
-      m["import"](obj);
-      return m;
-    };
-
     Model.prototype["import"] = function(obj) {
       var key, value, _i, _len, _ref, _ref2, _results;
       this.versions = obj.versions;
@@ -12303,50 +12345,6 @@ if (!JSON) {
       };
       Object.freeze(version);
       return this.versions.push(version);
-    };
-
-    Model.prototype.rollback = function(version_id) {
-      var exists, i, latest, version, _i, _j, _len, _len2, _ref, _ref2;
-      if (parseInt(version_id) < this.versions.length) {
-        _ref = Array(parseInt(version_id));
-        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-          i = _ref[_i];
-          this.pop_version();
-        }
-      } else {
-        exists = false;
-        _ref2 = this.versions;
-        for (_j = 0, _len2 = _ref2.length; _j < _len2; _j++) {
-          version = _ref2[_j];
-          if (version.version_id === version_id) exists = true;
-        }
-        if (!exists) {
-          throw new ReferenceError("Version " + version_id + " does not exist.");
-        }
-        latest = this.versions[this.versions.length - 1];
-        while (latest.version_id !== version_id && this.versions.length > 1) {
-          this.pop_version();
-        }
-      }
-      this["import"]({
-        id: this.id,
-        versions: this.versions
-      });
-      return this.write();
-    };
-
-    Model.prototype.save = function(callback) {
-      var diff, new_obj, old_obj;
-      new_obj = this["export"]();
-      old_obj = this.evolve();
-      diff = this.diff(new_obj, old_obj);
-      if (Object.keys(diff).length > 0) {
-        this.push_version(diff);
-        this.write(callback);
-      } else if (callback != null) {
-        callback();
-      }
-      return true;
     };
 
     Model.prototype.write = function(callback) {
@@ -13267,8 +13265,8 @@ if (!JSON) {
     Template: Template
   };
 
-  module = {};
+  if (typeof module !== "undefined" && module !== null) module.exports = Flakey;
 
-  module.exports = Flakey;
+  if (window) window.Flakey = Flakey;
 
 }).call(this);
