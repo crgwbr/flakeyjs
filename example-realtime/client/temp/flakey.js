@@ -11976,8 +11976,6 @@ if (!JSON) {
     return Flakey.models.backend_controller = new Flakey.models.BackendController();
   };
 
-  if (window) window.Flakey = Flakey;
-
   Flakey.util = {
     async: function(fn) {
       return setTimeout(fn, 0);
@@ -12162,11 +12160,78 @@ if (!JSON) {
       return set;
     };
 
+    Model.find = function(query) {
+      var ar, item, m, set, _i, _len;
+      ar = Flakey.models.backend_controller.find(this.model_name, query);
+      if (!ar.length) return [];
+      set = [];
+      for (_i = 0, _len = ar.length; _i < _len; _i++) {
+        item = ar[_i];
+        m = new this();
+        m["import"](item);
+        set.push(m);
+      }
+      return set;
+    };
+
+    Model.get = function(id) {
+      var m, obj;
+      obj = Flakey.models.backend_controller.get(this.model_name, id);
+      if (!obj) return;
+      m = new this();
+      m["import"](obj);
+      return m;
+    };
+
     Model.prototype["delete"] = function() {
       var event_key;
       Flakey.models.backend_controller["delete"](this.constructor.model_name, this.id);
       event_key = "model_" + (this.constructor.model_name.toLowerCase()) + "_updated";
       return Flakey.events.trigger(event_key, void 0);
+    };
+
+    Model.prototype.rollback = function(version_id) {
+      var exists, i, latest, version, _i, _j, _len, _len2, _ref, _ref2;
+      if (parseInt(version_id) < this.versions.length) {
+        _ref = Array(parseInt(version_id));
+        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+          i = _ref[_i];
+          this.pop_version();
+        }
+      } else {
+        exists = false;
+        _ref2 = this.versions;
+        for (_j = 0, _len2 = _ref2.length; _j < _len2; _j++) {
+          version = _ref2[_j];
+          if (version.version_id === version_id) exists = true;
+        }
+        if (!exists) {
+          throw new ReferenceError("Version " + version_id + " does not exist.");
+        }
+        latest = this.versions[this.versions.length - 1];
+        while (latest.version_id !== version_id && this.versions.length > 1) {
+          this.pop_version();
+        }
+      }
+      this["import"]({
+        id: this.id,
+        versions: this.versions
+      });
+      return this.write();
+    };
+
+    Model.prototype.save = function(callback) {
+      var diff, new_obj, old_obj;
+      new_obj = this["export"]();
+      old_obj = this.evolve();
+      diff = this.diff(new_obj, old_obj);
+      if (Object.keys(diff).length > 0) {
+        this.push_version(diff);
+        this.write(callback);
+      } else if (callback != null) {
+        callback();
+      }
+      return true;
     };
 
     Model.prototype.diff = function(new_obj, old_obj) {
@@ -12214,11 +12279,13 @@ if (!JSON) {
       return obj;
     };
 
-    Model.prototype.evolve = function(version_id) {
-      var key, obj, patches, rev, saved, value, versions, _i, _len, _ref;
+    Model.prototype.evolve = function(version_id, versions) {
+      var key, obj, patches, rev, saved, value, _i, _len, _ref;
       obj = {};
-      saved = Flakey.models.backend_controller.get(this.constructor.model_name, this.id);
-      versions = saved != null ? saved.versions : {};
+      if (versions === void 0 || versions.constructor !== Array) {
+        saved = Flakey.models.backend_controller.get(this.constructor.model_name, this.id);
+        versions = saved != null ? saved.versions : {};
+      }
       for (_i = 0, _len = versions.length; _i < _len; _i++) {
         rev = versions[_i];
         _ref = rev.fields;
@@ -12245,45 +12312,27 @@ if (!JSON) {
       return obj;
     };
 
-    Model.find = function(query) {
-      var ar, item, m, set, _i, _len;
-      ar = Flakey.models.backend_controller.find(this.model_name, query);
-      if (!ar.length) return [];
-      set = [];
-      for (_i = 0, _len = ar.length; _i < _len; _i++) {
-        item = ar[_i];
-        m = new this();
-        m["import"](item);
-        set.push(m);
-      }
-      return set;
-    };
-
-    Model.get = function(id) {
-      var m, obj;
-      obj = Flakey.models.backend_controller.get(this.model_name, id);
-      if (!obj) return;
-      m = new this();
-      m["import"](obj);
-      return m;
-    };
-
     Model.prototype["import"] = function(obj) {
-      var key, value, _ref, _results;
+      var key, value, _i, _len, _ref, _ref2, _results;
       this.versions = obj.versions;
       this.id = obj.id;
-      _ref = this.evolve();
+      _ref = this.constructor.fields;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        key = _ref[_i];
+        this[key] = void 0;
+      }
+      _ref2 = this.evolve(void 0, this.versions);
       _results = [];
-      for (key in _ref) {
-        if (!__hasProp.call(_ref, key)) continue;
-        value = _ref[key];
+      for (key in _ref2) {
+        if (!__hasProp.call(_ref2, key)) continue;
+        value = _ref2[key];
         _results.push(this[key] = value);
       }
       return _results;
     };
 
     Model.prototype.pop_version = function() {
-      return this.versions.pop();
+      if (this.versions.length > 0) return this.versions.pop();
     };
 
     Model.prototype.push_version = function(diff) {
@@ -12298,25 +12347,15 @@ if (!JSON) {
       return this.versions.push(version);
     };
 
-    Model.prototype.save = function(callback) {
-      var diff, new_obj, old_obj,
-        _this = this;
-      new_obj = this["export"]();
-      old_obj = this.evolve();
-      diff = this.diff(new_obj, old_obj);
-      if (Object.keys(diff).length > 0) {
-        this.push_version(diff);
-        Flakey.util.async(function() {
-          var event_key;
-          Flakey.models.backend_controller.save(_this.constructor.model_name, _this.id, _this.versions);
-          if (callback != null) callback();
-          event_key = "model_" + (_this.constructor.model_name.toLowerCase()) + "_updated";
-          return Flakey.events.trigger(event_key, void 0);
-        });
-      } else if (callback != null) {
-        callback();
-      }
-      return true;
+    Model.prototype.write = function(callback) {
+      var _this = this;
+      return Flakey.util.async(function() {
+        var event_key;
+        Flakey.models.backend_controller.save(_this.constructor.model_name, _this.id, _this.versions);
+        if (callback != null) callback();
+        event_key = "model_" + (_this.constructor.model_name.toLowerCase()) + "_updated";
+        return Flakey.events.trigger(event_key, void 0);
+      });
     };
 
     return Model;
@@ -13226,6 +13265,8 @@ if (!JSON) {
     Template: Template
   };
 
-  module.exports = Flakey;
+  if (typeof module !== "undefined" && module !== null) module.exports = Flakey;
+
+  if (window) window.Flakey = Flakey;
 
 }).call(this);

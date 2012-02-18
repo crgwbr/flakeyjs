@@ -1,8 +1,7 @@
-# ==========================================
-# Flakey.js Controllers
-# Craig Weber
-# ==========================================
-  
+# * * * * *
+# ## Controller Code
+
+# Subclass this to make controllers for your apps
 class Controller  
   constructor: (config = {}) ->
     @active = @active || false
@@ -15,6 +14,7 @@ class Controller
     @subcontrollers = @subcontrollers || []
     @query_params = @query_params || {}
     
+    # Build an HTML container to hold this controller
     @container = $(document.createElement('div'))
     @container.html(@container_html)
     @parent = config.parent || Flakey.settings.container
@@ -23,15 +23,18 @@ class Controller
     @container.attr('id', @id)
     for name in @class_name.split(' ')
       @container.addClass(name)
-      
+  
+  # Append another controller to this one. It will always mimic the active/passive state of this controller
   append: () ->
     for Contr in arguments
       contr = new Contr({parent: @parent})
       @subcontrollers.push(contr)
-    
+  
+  # Just a stub
   render: () ->
     @html('')
-      
+  
+  # Bind actions to JQuery events    
   bind_actions: () ->
     for own key, fn of @actions
       key_parts = key.split(' ')
@@ -39,6 +42,7 @@ class Controller
       selector = key_parts.join(' ')
       $(selector).bind(action, @[fn])
   
+  # Unbind actions from JQuery events
   unbind_actions: () ->
     for own key, fn of @actions
       key_parts = key.split(' ')
@@ -46,11 +50,13 @@ class Controller
       selector = key_parts.join(' ')
       $(selector).unbind(action)
   
+  # Set the container html to the given string. Generally you can pass the output of a template render right into this.
   html: (htm) ->
     @container_html = htm
     @container.html(@container_html)
     Flakey.events.trigger('html_updated')
-    
+  
+  # Make this controller active by setting its active class and binding events
   make_active: () ->
     @active = true
     @render()
@@ -59,19 +65,23 @@ class Controller
     for sub in @subcontrollers
       sub.make_active()
     
+  # Make this controller inactive and unbind its events.
   make_inactive: () ->
     @active = false
     @unbind_actions()
     @container.removeClass('active').addClass('passive')
     for sub in @subcontrollers
       sub.make_inactive()
-      
+  
+  # Set the @query_params attribute
   set_queryparams: (params) ->
     @query_params = params
     for sub in @subcontrollers
       sub.set_queryparams(params)
       
-      
+
+# Subclass a stack to manage a stack of controllers and make sure only one is ever visible at a time.
+# Very similar interface to an actual controller
 class Stack
   constructor: (config = {}) ->
     @id = @id || ''
@@ -95,8 +105,10 @@ class Stack
     for own name, contr of @controllers
       @controllers[name] = new contr({parent: @container})
     
+    # Make sure we resolve a controller any time the location hash changes.
     window.addEventListener('hashchange', @resolve, false)
     
+  # Resolve the location hash to a controller and make it active
   resolve: () =>
     hash = Flakey.util.get_hash()
     
@@ -120,8 +132,11 @@ class Stack
       return
     
     @active_controller = new_controller
+    
+    # Parse query params from the hash and send them to the active controller
     @controllers[@active_controller].set_queryparams(Flakey.util.querystring.parse(querystring))
     
+    # Make all the other controllers inactive
     for own name, controller of @controllers
       if name != @active_controller
         @controllers[name].make_inactive()
@@ -132,6 +147,7 @@ class Stack
         
     return @controllers[@active_controller]
   
+  # Make this stack active
   make_active: () ->
     @resolve()
     if @controllers[@active_controller] != undefined
@@ -139,11 +155,12 @@ class Stack
       @controllers[@active_controller].render()
     @active = true
         
+  # Make this stack inactive
   make_inactive: () ->
     if @controllers[@active_controller] != undefined
       @controllers[@active_controller].make_inactive()
     @active = false
-    
+  
   set_queryparams: (params) ->
     @query_params = params
   

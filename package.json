@@ -1,0 +1,1 @@
+{"name":"flakey","description":"Flakey.js MVC Framework for browsers","version":"0.0.3","repository":{"type":"git","url":"git@github.com:crgwbr/flakeyjs.git"},"author":"Craig Weber <crgwbr@gmail.com>","engines":{"node":"*"},"main":"./flakey.js"}

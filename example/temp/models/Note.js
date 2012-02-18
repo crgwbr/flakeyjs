@@ -17,8 +17,6 @@
 
     Note.fields = ['id', 'name', 'content'];
 
-    Note.objects.constructor = Note;
-
     return Note;
 
   })(Flakey.models.Model);

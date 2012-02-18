@@ -12282,7 +12282,7 @@ if (!JSON) {
         };
     }
 }());;
-  var $, Backend, BackendController, Controller, Events, Flakey, JSON, LocalBackend, MemoryBackend, Model, ServerBackend, Stack, Template, get_template,
+  var $, Backend, BackendController, Controller, Events, Flakey, JSON, LocalBackend, MemoryBackend, Model, ServerBackend, SocketIOBackend, Stack, Template, get_template,
     __hasProp = Object.prototype.hasOwnProperty,
     __indexOf = Array.prototype.indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; },
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; },
@@ -12294,7 +12294,9 @@ if (!JSON) {
       diff_text: true,
       container: void 0,
       read_backend: 'memory',
-      base_model_endpoint: null
+      base_model_endpoint: null,
+      socketio_server: null,
+      enabled_local_backend: true
     },
     status: {
       server_online: void 0
@@ -12317,9 +12319,48 @@ if (!JSON) {
     return Flakey.models.backend_controller = new Flakey.models.BackendController();
   };
 
-  if (window) window.Flakey = Flakey;
-
   Flakey.util = {
+    async: function(fn) {
+      return setTimeout(fn, 0);
+    },
+    deep_compare: function(a, b) {
+      var compare_objects;
+      if (typeof a !== typeof b) return false;
+      compare_objects = function(a, b) {
+        var key, value;
+        for (key in a) {
+          value = a[key];
+          if (!(b[key] != null)) return false;
+        }
+        for (key in b) {
+          value = b[key];
+          if (!(a[key] != null)) return false;
+        }
+        for (key in a) {
+          value = a[key];
+          if (value) {
+            switch (typeof value) {
+              case 'object':
+                if (!compare_objects(value, b[key])) return false;
+                break;
+              default:
+                if (value !== b[key]) return false;
+            }
+          } else {
+            if (b[key]) return false;
+          }
+        }
+        return true;
+      };
+      switch (typeof a) {
+        case 'object':
+          if (!compare_objects(a, b)) return false;
+          break;
+        default:
+          if (a !== b) return false;
+      }
+      return true;
+    },
     guid: function() {
       var guid;
       guid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx';
@@ -12406,16 +12447,17 @@ if (!JSON) {
       return this.events[namespace][event];
     };
 
-    Events.prototype.trigger = function(event, namespace) {
+    Events.prototype.trigger = function(event, namespace, data) {
       var fn, output, _i, _len, _ref;
       if (namespace == null) namespace = 'flakey';
+      if (data == null) data = {};
       if (this.events[namespace] === void 0) this.events[namespace] = {};
       if (this.events[namespace][event] === void 0) return;
       output = [];
       _ref = this.events[namespace][event];
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         fn = _ref[_i];
-        output.push(fn());
+        output.push(fn(event, namespace, data));
       }
       return output;
     };
@@ -12437,57 +12479,132 @@ if (!JSON) {
 
     Model.fields = ['id'];
 
-    Model.objects = {
-      constructor: Model,
-      get: function(id) {
-        var m, obj;
-        obj = Flakey.models.backend_controller.get(this.constructor.model_name, id);
-        if (!obj) return;
-        m = new this.constructor();
-        m["import"](obj);
-        return m;
-      },
-      all: function() {
-        var m, obj, set, _i, _len, _ref;
-        set = [];
-        _ref = Flakey.models.backend_controller.all(this.constructor.model_name);
-        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-          obj = _ref[_i];
-          m = new this.constructor();
-          m["import"](obj);
-          set.push(m);
-        }
-        return set;
-      }
-    };
-
-    function Model() {
+    function Model(init_values) {
+      var key, value;
       this.id = Flakey.util.guid();
       this.versions = [];
+      for (key in init_values) {
+        if (!__hasProp.call(init_values, key)) continue;
+        value = init_values[key];
+        this[key] = value;
+      }
     }
 
+    Model.all = function() {
+      var m, obj, set, _i, _len, _ref;
+      set = [];
+      _ref = Flakey.models.backend_controller.all(this.model_name);
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        obj = _ref[_i];
+        m = new this();
+        m["import"](obj);
+        set.push(m);
+      }
+      return set;
+    };
+
+    Model.find = function(query) {
+      var ar, item, m, set, _i, _len;
+      ar = Flakey.models.backend_controller.find(this.model_name, query);
+      if (!ar.length) return [];
+      set = [];
+      for (_i = 0, _len = ar.length; _i < _len; _i++) {
+        item = ar[_i];
+        m = new this();
+        m["import"](item);
+        set.push(m);
+      }
+      return set;
+    };
+
+    Model.get = function(id) {
+      var m, obj;
+      obj = Flakey.models.backend_controller.get(this.model_name, id);
+      if (!obj) return;
+      m = new this();
+      m["import"](obj);
+      return m;
+    };
+
     Model.prototype["delete"] = function() {
-      return Flakey.models.backend_controller["delete"](this.constructor.model_name, this.id);
+      var event_key;
+      Flakey.models.backend_controller["delete"](this.constructor.model_name, this.id);
+      event_key = "model_" + (this.constructor.model_name.toLowerCase()) + "_updated";
+      return Flakey.events.trigger(event_key, void 0);
+    };
+
+    Model.prototype.rollback = function(version_id) {
+      var exists, i, latest, version, _i, _j, _len, _len2, _ref, _ref2;
+      if (parseInt(version_id) < this.versions.length) {
+        _ref = Array(parseInt(version_id));
+        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+          i = _ref[_i];
+          this.pop_version();
+        }
+      } else {
+        exists = false;
+        _ref2 = this.versions;
+        for (_j = 0, _len2 = _ref2.length; _j < _len2; _j++) {
+          version = _ref2[_j];
+          if (version.version_id === version_id) exists = true;
+        }
+        if (!exists) {
+          throw new ReferenceError("Version " + version_id + " does not exist.");
+        }
+        latest = this.versions[this.versions.length - 1];
+        while (latest.version_id !== version_id && this.versions.length > 1) {
+          this.pop_version();
+        }
+      }
+      this["import"]({
+        id: this.id,
+        versions: this.versions
+      });
+      return this.write();
+    };
+
+    Model.prototype.save = function(callback) {
+      var diff, new_obj, old_obj;
+      new_obj = this["export"]();
+      old_obj = this.evolve();
+      diff = this.diff(new_obj, old_obj);
+      if (Object.keys(diff).length > 0) {
+        this.push_version(diff);
+        this.write(callback);
+      } else if (callback != null) {
+        callback();
+      }
+      return true;
     };
 
     Model.prototype.diff = function(new_obj, old_obj) {
       var key, patches, save, _i, _len, _ref;
       save = {};
-      _ref = Object.keys(new_obj);
+      _ref = this.constructor.fields;
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         key = _ref[_i];
-        if (new_obj[key] !== old_obj[key]) {
-          if (new_obj[key].constructor === String) {
-            old_obj[key] = old_obj[key] != null ? old_obj[key].toString() : '';
-          }
-          if (new_obj[key].constructor === String && old_obj[key].constructor === String && Flakey.settings.diff_text) {
-            patches = Flakey.diff_patch.patch_make(old_obj[key], new_obj[key]);
-            save[key] = {
-              constructor: 'Patch',
-              patch_text: Flakey.diff_patch.patch_toText(patches)
-            };
-          } else {
-            save[key] = new_obj[key];
+        if (!Flakey.util.deep_compare(new_obj[key], old_obj[key])) {
+          switch (new_obj[key].constructor) {
+            case Object:
+              save[key] = $.extend(true, {}, new_obj[key]);
+              break;
+            case Array:
+              save[key] = $.extend(true, [], new_obj[key]);
+              break;
+            case String:
+              old_obj[key] = old_obj[key] != null ? old_obj[key].toString() : '';
+              if (Flakey.settings.diff_text) {
+                patches = Flakey.diff_patch.patch_make(old_obj[key], new_obj[key]);
+                save[key] = {
+                  constructor: 'Patch',
+                  patch_text: Flakey.diff_patch.patch_toText(patches)
+                };
+              } else {
+                save[key] = new_obj[key];
+              }
+              break;
+            default:
+              save[key] = new_obj[key];
           }
         }
       }
@@ -12505,21 +12622,32 @@ if (!JSON) {
       return obj;
     };
 
-    Model.prototype.evolve = function(version_id) {
-      var key, obj, patches, rev, value, _i, _len, _ref, _ref2;
+    Model.prototype.evolve = function(version_id, versions) {
+      var key, obj, patches, rev, saved, value, _i, _len, _ref;
       obj = {};
-      _ref = this.versions;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        rev = _ref[_i];
-        _ref2 = rev.fields;
-        for (key in _ref2) {
-          if (!__hasProp.call(_ref2, key)) continue;
-          value = _ref2[key];
-          if (value.constructor === 'Patch') {
-            patches = Flakey.diff_patch.patch_fromText(value.patch_text);
-            obj[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0];
-          } else {
-            obj[key] = value;
+      if (versions === void 0 || versions.constructor !== Array) {
+        saved = Flakey.models.backend_controller.get(this.constructor.model_name, this.id);
+        versions = saved != null ? saved.versions : {};
+      }
+      for (_i = 0, _len = versions.length; _i < _len; _i++) {
+        rev = versions[_i];
+        _ref = rev.fields;
+        for (key in _ref) {
+          if (!__hasProp.call(_ref, key)) continue;
+          value = _ref[key];
+          switch (value.constructor) {
+            case 'Patch':
+              patches = Flakey.diff_patch.patch_fromText(value.patch_text);
+              obj[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0];
+              break;
+            case Object:
+              obj[key] = $.extend(true, {}, value);
+              break;
+            case Array:
+              obj[key] = $.extend(true, [], value);
+              break;
+            default:
+              obj[key] = value;
           }
         }
         if (version_id !== void 0 && version_id === rev.version_id) return obj;
@@ -12527,48 +12655,50 @@ if (!JSON) {
       return obj;
     };
 
-    Model.set_fields = function() {
-      var field, _i, _len;
-      for (_i = 0, _len = arguments.length; _i < _len; _i++) {
-        field = arguments[_i];
-        this.fields.push(field);
-      }
-      return true;
-    };
-
     Model.prototype["import"] = function(obj) {
-      var key, value, _ref, _results;
+      var key, value, _i, _len, _ref, _ref2, _results;
       this.versions = obj.versions;
       this.id = obj.id;
-      _ref = this.evolve();
+      _ref = this.constructor.fields;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        key = _ref[_i];
+        this[key] = void 0;
+      }
+      _ref2 = this.evolve(void 0, this.versions);
       _results = [];
-      for (key in _ref) {
-        if (!__hasProp.call(_ref, key)) continue;
-        value = _ref[key];
+      for (key in _ref2) {
+        if (!__hasProp.call(_ref2, key)) continue;
+        value = _ref2[key];
         _results.push(this[key] = value);
       }
       return _results;
     };
 
-    Model.prototype.push_version = function(diff) {
-      var version_id;
-      version_id = Flakey.util.guid();
-      return this.versions.push({
-        version_id: version_id,
-        time: +(new Date()),
-        fields: diff
-      });
+    Model.prototype.pop_version = function() {
+      if (this.versions.length > 0) return this.versions.pop();
     };
 
-    Model.prototype.save = function() {
-      var diff, new_obj, old_obj;
-      new_obj = this["export"]();
-      old_obj = this.evolve();
-      diff = this.diff(new_obj, old_obj);
-      if (Object.keys(diff).length > 0) {
-        this.push_version(diff);
-        return Flakey.models.backend_controller.save(this.constructor.model_name, this.id, this.versions);
-      }
+    Model.prototype.push_version = function(diff) {
+      var version, version_id;
+      version_id = Flakey.util.guid();
+      version = {
+        version_id: version_id,
+        time: +(new Date()),
+        fields: $.extend(true, {}, diff)
+      };
+      Object.freeze(version);
+      return this.versions.push(version);
+    };
+
+    Model.prototype.write = function(callback) {
+      var _this = this;
+      return Flakey.util.async(function() {
+        var event_key;
+        Flakey.models.backend_controller.save(_this.constructor.model_name, _this.id, _this.versions);
+        if (callback != null) callback();
+        event_key = "model_" + (_this.constructor.model_name.toLowerCase()) + "_updated";
+        return Flakey.events.trigger(event_key, void 0);
+      });
     };
 
     return Model;
@@ -12584,18 +12714,27 @@ if (!JSON) {
           log_key: 'flakey-memory-log',
           pending_log: [],
           interface: new MemoryBackend()
-        },
-        local: {
+        }
+      };
+      if (Flakey.settings.enabled_local_backend) {
+        this.backends['local'] = {
           log_key: 'flakey-local-log',
           pending_log: [],
           interface: new LocalBackend()
-        }
-      };
+        };
+      }
       if (Flakey.settings.base_model_endpoint) {
         this.backends['server'] = {
           log_key: 'flakey-server-log',
           pending_log: [],
           interface: new ServerBackend()
+        };
+      }
+      if (Flakey.settings.socketio_server) {
+        this.backends['socketio'] = {
+          log_key: 'flakey-socketio-log',
+          pending_log: [],
+          interface: new SocketIOBackend()
         };
       }
       this.read = Flakey.settings.read_backend || 'memory';
@@ -12667,16 +12806,18 @@ if (!JSON) {
         log = backend.pending_log;
         for (_i = 0, _len = log.length; _i < _len; _i++) {
           msg = log[_i];
-          action = msg.split(this.delim);
-          fn = Flakey.models.backend_controller.backends[name].interface[action[0]];
-          params = JSON.parse(action[1]);
-          bends = {};
-          bends[name] = backend;
-          params.push(bends);
-          if (fn.apply(Flakey.models.backend_controller.backends[name].interface, params)) {
-            backend.pending_log.shift();
-          } else {
-            break;
+          if (msg != null) {
+            action = msg.split(this.delim);
+            fn = Flakey.models.backend_controller.backends[name].interface[action[0]];
+            params = JSON.parse(action[1]);
+            bends = {};
+            bends[name] = backend;
+            params.push(bends);
+            if (fn.apply(Flakey.models.backend_controller.backends[name].interface, params)) {
+              backend.pending_log.shift();
+            } else {
+              break;
+            }
           }
         }
       }
@@ -12707,7 +12848,7 @@ if (!JSON) {
     };
 
     BackendController.prototype.sync = function(name, backends) {
-      var backend, bname, item, key, output, store, _i, _len, _ref, _ref2, _results;
+      var backend, bname, event_key, item, key, output, store, _i, _len, _ref, _ref2;
       if (backends == null) backends = this.backends;
       store = {};
       for (bname in backends) {
@@ -12729,13 +12870,13 @@ if (!JSON) {
         item = store[key];
         output.push(item);
       }
-      _results = [];
       for (bname in backends) {
         if (!__hasProp.call(backends, bname)) continue;
         backend = backends[bname];
-        _results.push(backend.interface._write(name, output));
+        backend.interface._write(name, output);
       }
-      return _results;
+      event_key = "model_" + (name.toLowerCase()) + "_updated";
+      return Flakey.events.trigger(event_key, void 0);
     };
 
     BackendController.prototype.merge_version_lists = function(a, b) {
@@ -12941,7 +13082,7 @@ if (!JSON) {
     __extends(ServerBackend, _super);
 
     function ServerBackend() {
-      ServerBackend.__super__.constructor.apply(this, arguments);
+      this.server_cache = {};
     }
 
     ServerBackend.prototype.build_endpoint_url = function(name, id, params) {
@@ -12956,7 +13097,7 @@ if (!JSON) {
     };
 
     ServerBackend.prototype.all = function(name) {
-      var store;
+      var obj, store, _i, _len;
       store = false;
       $.ajax({
         async: false,
@@ -12971,6 +13112,10 @@ if (!JSON) {
         },
         type: 'GET'
       });
+      for (_i = 0, _len = store.length; _i < _len; _i++) {
+        obj = store[_i];
+        this.save_to_cache(name, obj.id, obj.versions);
+      }
       return store;
     };
 
@@ -12990,11 +13135,26 @@ if (!JSON) {
         },
         type: 'GET'
       });
+      this.save_to_cache(name, obj.id, obj.versions);
       return obj;
     };
 
-    ServerBackend.prototype.save = function(name, id, versions) {
-      var status;
+    ServerBackend.prototype.get_from_cache = function(name, id) {
+      if (this.server_cache[name]) {
+        if (this.server_cache[name][id]) return this.server_cache[name][id];
+      }
+    };
+
+    ServerBackend.prototype.save = function(name, id, versions, force_write) {
+      var cached_obj, proposed_obj, status;
+      proposed_obj = {
+        id: id,
+        versions: versions
+      };
+      cached_obj = this.get_from_cache(name, id);
+      if (Flakey.util.deep_compare(proposed_obj, cached_obj) && force_write !== true) {
+        return true;
+      }
       status = false;
       $.ajax({
         async: false,
@@ -13014,6 +13174,14 @@ if (!JSON) {
         type: 'POST'
       });
       return status;
+    };
+
+    ServerBackend.prototype.save_to_cache = function(name, id, versions) {
+      this.server_cache[name] = this.server_cache[name] || {};
+      return this.server_cache[name][id] = $.extend(true, {}, {
+        id: id,
+        versions: versions
+      });
     };
 
     ServerBackend.prototype["delete"] = function(name, id) {
@@ -13058,6 +13226,120 @@ if (!JSON) {
     };
 
     return ServerBackend;
+
+  })(Backend);
+
+  SocketIOBackend = (function(_super) {
+
+    __extends(SocketIOBackend, _super);
+
+    function SocketIOBackend() {
+      var _this = this;
+      this.status = true;
+      this.socket = window.socket = io.connect(Flakey.settings.socketio_server);
+      this.server_cache = {};
+      this.socket.on('sync', function(set) {
+        var name, names, obj, _i, _j, _len, _len2, _ref, _results;
+        names = [];
+        for (_i = 0, _len = set.length; _i < _len; _i++) {
+          obj = set[_i];
+          if (_ref = obj.name, __indexOf.call(names, _ref) < 0) {
+            names.push(obj.name);
+          }
+          _this.save_to_cache(obj.name, obj.id, obj.versions);
+        }
+        _results = [];
+        for (_j = 0, _len2 = names.length; _j < _len2; _j++) {
+          name = names[_j];
+          _results.push(Flakey.models.backend_controller.sync(name));
+        }
+        return _results;
+      });
+      this.socket.emit('fetch_all');
+    }
+
+    SocketIOBackend.prototype.all = function(name) {
+      var id, store, _i, _len, _ref;
+      store = [];
+      this.server_cache[name] = this.server_cache[name] || {};
+      _ref = Object.keys(this.server_cache[name]);
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        id = _ref[_i];
+        store.push(this.get_from_cache(name, id));
+      }
+      return store;
+    };
+
+    SocketIOBackend.prototype.get = function(name, id) {
+      return this.get_from_cache(name, id);
+    };
+
+    SocketIOBackend.prototype.get_from_cache = function(name, id) {
+      if (this.server_cache[name]) {
+        if (this.server_cache[name][id]) return this.server_cache[name][id];
+      }
+    };
+
+    SocketIOBackend.prototype.save = function(name, id, versions, force_write) {
+      var cached_obj, proposed_obj,
+        _this = this;
+      proposed_obj = {
+        id: id,
+        versions: versions
+      };
+      cached_obj = this.get_from_cache(name, id);
+      if (Flakey.util.deep_compare(proposed_obj, cached_obj) && force_write !== true) {
+        return true;
+      }
+      this.socket.emit('write', {
+        name: name,
+        id: id,
+        versions: versions
+      }, function() {
+        return _this.save_to_cache(name, id, versions);
+      });
+      return this.status;
+    };
+
+    SocketIOBackend.prototype.save_to_cache = function(name, id, versions) {
+      this.server_cache[name] = this.server_cache[name] || {};
+      return this.server_cache[name][id] = $.extend(true, {}, {
+        id: id,
+        versions: versions
+      });
+    };
+
+    SocketIOBackend.prototype["delete"] = function(name, id) {
+      this.socket.emit('delete', {
+        name: name,
+        id: id
+      });
+      return this.status;
+    };
+
+    SocketIOBackend.prototype._query = function(name, query) {
+      throw new TypeError("_query not supported on socketio backend");
+    };
+
+    SocketIOBackend.prototype._query_by_id = function(name, id) {
+      throw new TypeError("_query_by_id not supported on socketio backend");
+    };
+
+    SocketIOBackend.prototype._read = function(name) {
+      return this.all(name);
+    };
+
+    SocketIOBackend.prototype._write = function(name, store) {
+      var item, status, _i, _len;
+      status = true;
+      for (_i = 0, _len = store.length; _i < _len; _i++) {
+        item = store[_i];
+        if (!this.save(name, item.id, item.versions)) status = false;
+      }
+      return status;
+    };
+
+    return SocketIOBackend;
 
   })(Backend);
 
@@ -13326,7 +13608,9 @@ if (!JSON) {
     Template: Template
   };
 
-  module.exports = Flakey;
+  if (typeof module !== "undefined" && module !== null) module.exports = Flakey;
+
+  if (window) window.Flakey = Flakey;
 
 }).call(this);
 
@@ -13363,7 +13647,7 @@ require.define("/controllers.js", function (require, module, exports, __dirname,
       var context;
       context = {
         selected: this.query_params.id,
-        notes: Note.objects.all()
+        notes: Note.all()
       };
       return this.html(this.tmpl.render(context));
     };
@@ -13404,7 +13688,7 @@ require.define("/controllers.js", function (require, module, exports, __dirname,
     NoteEditor.prototype.render = function() {
       var context;
       context = {};
-      context.note = Note.objects.get(this.query_params.id);
+      context.note = Note.get(this.query_params.id);
       if (context.note === void 0 || this.query_params.id === 'new') {
         context.note = new Note();
       }
@@ -13415,7 +13699,7 @@ require.define("/controllers.js", function (require, module, exports, __dirname,
 
     NoteEditor.prototype.save_note = function(event) {
       var note;
-      note = Note.objects.get(this.query_params.id);
+      note = Note.get(this.query_params.id);
       if (note === void 0) {
         note = new Note();
         note.id = $('#note-id').val();
@@ -13435,7 +13719,7 @@ require.define("/controllers.js", function (require, module, exports, __dirname,
 
     NoteEditor.prototype.delete_note = function(event) {
       var id, note;
-      note = Note.objects.get(this.query_params.id);
+      note = Note.get(this.query_params.id);
       if (!(note != null)) return;
       id = note.id;
       if (!confirm("Are you sure you'd like to delete this note?")) return;
@@ -13451,7 +13735,7 @@ require.define("/controllers.js", function (require, module, exports, __dirname,
     NoteEditor.prototype.evolve = function() {
       var note, time, version, version_id, version_index;
       version_index = parseInt($('#history-slider').val());
-      note = Note.objects.get(this.query_params.id);
+      note = Note.get(this.query_params.id);
       version_id = note.versions[version_index].version_id;
       time = new Date(note.versions[version_index].time);
       version = note.evolve(version_id);
@@ -13529,8 +13813,6 @@ require.define("/models/Note.js", function (require, module, exports, __dirname,
     Note.model_name = 'Note';
 
     Note.fields = ['id', 'name', 'content'];
-
-    Note.objects.constructor = Note;
 
     return Note;
 

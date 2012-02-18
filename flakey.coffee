@@ -1,6 +1,6 @@
 # ==========================================
-# Version: 0.0.2
-# Compiled: Sun Feb 05 2012 10:59:07 GMT-0500 (EST)
+# Version: 0.0.3
+# Compiled: Sat Feb 18 2012 17:24:32 GMT-0500 (EST)
 
 # Contents:
 #   - src/lib/diff_match_patch.js
@@ -11957,11 +11957,28 @@ if (!JSON) {
     }
 }());`
 
-# ==========================================
-# Flakey.js
-# Craig Weber
-# ==========================================
+# * * * * *
+# # Flakey.js
+# See AUTHORS file for credits
+#
+# Flakey.js is compiled by concat'ing the src 
+# files in this directory in the following order:
+#  - flakey.coffee
+#  - util.coffee
+#  - models.coffee
+#  - controllers.coffee
+#  - views.coffee
+#  - exports.coffee
+# This assembled file is then saved in ../flakey.coffee
+# and compiled into ../flakey.js and ../flakey.min.js
+# 
+# This file is responsible for creating the main Flakey
+# object so that util/model/controller modules can 
+# later add themselves to it. We also initalize jQuery
+# in noconflict mode and assign it to Flakey.$
+# * * * * *
 
+# Setup the Flakey object with an instance of diff_match_patch and some default settings.
 Flakey = {
   diff_patch: new diff_match_patch()
   settings: {
@@ -11977,10 +11994,15 @@ Flakey = {
   }
 }
 
-jQuery.noConflict();
+# Put JQuery into No-Conflict mode, so that we don't interfere with any other library's
+jQuery.noConflict()
 $ = Flakey.$ = jQuery
+
+# Make JSON accessible too
 JSON = Flakey.JSON = JSON
 
+# Flakey's "contructor." This should be called on page load to customize settings and
+# init the model backend controller.
 Flakey.init = (config) ->
   # Setup config
   for own key, value of config
@@ -11988,38 +12010,35 @@ Flakey.init = (config) ->
   
   # Init this now so the new settings take effect
   Flakey.models.backend_controller = new Flakey.models.BackendController()
-  
-
-if window
-  window.Flakey = Flakey
 
 
-# ==========================================
-# Flakey.js Utility Functions
-# Craig Weber
-# ==========================================
-
+# * * * * *
+# ## Commonly useful utility functions
 
 Flakey.util = {
-  # Run function asynchronously
+  # Run a function asynchronously
   async: (fn) ->
     setTimeout(fn, 0)
     
-  # Deep Compare 2 objects
+  # Deep Compare 2 objects, recursing down through arrays and objects so that we can compare only primitive types
   # Return true if they are equal
   deep_compare: (a, b) ->
+    # Quick sanity check to make sure item's apear similar
     if typeof a != typeof b
       return false
-      
+    
+    # Recursive lambda function to compare 2 objects
     compare_objects = (a, b) ->
+      # Make sure a & b have the same keys
       for key, value of a
         if not b[key]?
           return false
-
+      
       for key, value of b
         if not a[key]?
           return false
-
+      
+      # Loop through all keys, either checking equality or recursing down another level
       for key, value of a
         if value
           switch typeof value
@@ -12032,9 +12051,11 @@ Flakey.util = {
         else
           if b[key]
             return false
-
-      return true
       
+      # Must be equal if we made it here
+      return true
+    
+    # Abuse JavaScript's typeof stupidity (everything except a primitive is an "object")
     switch typeof a
       when 'object'
         if not compare_objects(a, b)
@@ -12042,10 +12063,11 @@ Flakey.util = {
       else
         if a != b
           return false
-          
+    
     return true
   
   # GUID function from spine.js
+  # Generates a random GUID
   # https://github.com/maccman/spine/blob/master/src/spine.coffee
   guid: () ->
     guid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
@@ -12092,6 +12114,7 @@ Flakey.util = {
       return pairs.join('&')
       
     # Update the page's current querystring
+    # Settings merge to true will add your params to the current querystring. By default, your params wipe out the current querystring.
     update: (params, merge = false) ->
       hash = Flakey.util.get_hash()
       if hash.indexOf('?')
@@ -12110,10 +12133,12 @@ Flakey.util = {
 }
 
   
-# Basic Event System
+# Basic Observer Event System
 class Events
   events: {}
   
+  # Register a new function to be triggered by the given event. You may optionally provide a namespace
+  # to protect you app's events.
   register: (event, fn, namespace = 'flakey') ->
     if @events[namespace] == undefined
       @events[namespace] = {}
@@ -12121,7 +12146,8 @@ class Events
       @events[namespace][event] = []
     @events[namespace][event].push(fn)
     return @events[namespace][event]
-    
+  
+  # Trigger an event by passing it's name and optionally the namespace and data to send to each listening function
   trigger: (event, namespace = 'flakey', data = {}) ->
     if @events[namespace] == undefined
       @events[namespace] = {}
@@ -12131,19 +12157,18 @@ class Events
     for fn in @events[namespace][event]
       output.push(fn(event, namespace, data))
     return output
-    
+  
+  # Wipeout all registered functions from a namesapce. Dangerous.
   clear: (namespace = 'flakey') ->
     @events[namespace] = {}
-  
+
 Flakey.events = new Events()
 
 
-# ==========================================
-# Flakey.js Models
-# Craig Weber
-# ==========================================
+# * * * * *
+# ## Model and model backend code
 
-
+# ### Subclass this to create you own models
 class Model
   @model_name: null
   @fields: ['id']
@@ -12155,7 +12180,8 @@ class Model
     for own key, value of init_values
       @[key] = value
   
-  # Get all objects
+  # #### Class Methods
+  # List all objects
   @all: () ->
     set = []
     for obj in Flakey.models.backend_controller.all(@model_name)
@@ -12164,78 +12190,23 @@ class Model
       set.push(m)
     return set
     
-  delete: () ->
-    Flakey.models.backend_controller.delete(@constructor.model_name, @id)
-    event_key = "model_#{ @constructor.model_name.toLowerCase() }_updated"
-    Flakey.events.trigger(event_key, undefined)
-    
-  diff: (new_obj, old_obj) ->
-    save = {}
-    for key in @constructor.fields
-      if not Flakey.util.deep_compare(new_obj[key], old_obj[key])
-        switch new_obj[key].constructor
-          when Object
-            save[key] = $.extend(true, {}, new_obj[key])
-          when Array
-            save[key] = $.extend(true, [], new_obj[key])
-          when String
-            old_obj[key] = if old_obj[key]? then old_obj[key].toString() else ''
-            if Flakey.settings.diff_text
-              patches = Flakey.diff_patch.patch_make(old_obj[key], new_obj[key])
-              save[key] = {
-                constructor: 'Patch'
-                patch_text: Flakey.diff_patch.patch_toText(patches)
-              }
-            else
-              save[key] = new_obj[key]
-          else
-            save[key] = new_obj[key]
-    return save
-  
-  export: () ->
-    obj = {}
-    for field in @constructor.fields
-      obj[field] = @[field]
-    return obj
-    
-  evolve: (version_id, versions) ->
-    obj = {}
-    
-    if versions == undefined or versions.constructor != Array
-      saved = Flakey.models.backend_controller.get(@constructor.model_name, @id)
-      versions = if saved? then saved.versions else {}
-    
-    # Load Fields
-    for rev in versions
-      for own key, value of rev.fields
-        switch value.constructor
-          when 'Patch'
-            patches = Flakey.diff_patch.patch_fromText(value.patch_text)
-            obj[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0]
-          when Object
-            obj[key] = $.extend(true, {}, value)
-          when Array
-            obj[key] = $.extend(true, [], value)
-          else
-            obj[key] = value
-      if version_id != undefined and version_id == rev.version_id
-        return obj
-    return obj
-    
   # Query for a set of objects by a query object
+  # e.g. Model.find({name: 'sam'})
   @find: (query) ->
+    # Get data from the backend controller
     ar = Flakey.models.backend_controller.find(@model_name, query)
     if not ar.length
       return []
-    
+
+    # Instantiate a set of objects from the found data
     set = []
     for item in ar
       m = new @()
       m.import(item)
       set.push(m)
     return set
-    
-  # Query for a single object by id
+
+  # Query for a single object by it's id
   @get: (id) ->
     obj = Flakey.models.backend_controller.get(@model_name, id)
     if not obj
@@ -12243,33 +12214,15 @@ class Model
     m = new @()
     m.import(obj)
     return m
-    
-  import: (obj) ->
-    @versions = obj.versions
-    @id = obj.id
-    
-    # Reset fields
-    for key in @constructor.fields
-      @[key] = undefined
-    
-    # Load new fields
-    for own key, value of @evolve(undefined, @versions)
-      @[key] = value
-      
-  pop_version: () ->
-    if @versions.length > 0
-      @versions.pop()
-    
-  push_version: (diff) ->
-    version_id = Flakey.util.guid()
-    version = {
-      version_id: version_id,
-      time: +(new Date()),
-      fields: $.extend(true, {}, diff)
-    }
-    Object.freeze(version)
-    @versions.push(version)
-    
+  
+  # #### Public Methods
+  # Delete this instance from all backends. Just like a real database, this is irreversible.
+  delete: () ->
+    Flakey.models.backend_controller.delete(@constructor.model_name, @id)
+    event_key = "model_#{ @constructor.model_name.toLowerCase() }_updated"
+    Flakey.events.trigger(event_key, undefined)
+  
+  # Rollback this instance. If version_id is numeric, rollback that many versions. If it's a version_id, rollback to that version.
   rollback: (version_id) ->
     if parseInt(version_id) < @versions.length
       # Rollback X number of versions
@@ -12283,17 +12236,18 @@ class Model
           exists = true
       if not exists
         throw new ReferenceError("Version #{ version_id } does not exist.")
-      
+
       latest = @versions[@versions.length - 1]
       while latest.version_id != version_id and @versions.length > 1
         @pop_version()
-    
+
     @import {
       id: @id
       versions: @versions
     }
     @write()
-    
+
+  # Save this instance and write it to persistant storage.
   save: (callback) ->
     new_obj = @export()
     old_obj = @evolve()
@@ -12305,7 +12259,104 @@ class Model
     else if callback?
       callback()
     return true
+  
+  # #### Private Methods
+  # Compares two objects (old and new) and returns a delta object representing the changes
+  diff: (new_obj, old_obj) ->
+    save = {}
+    # Only compare the fields we care about (dtaa fields in this model).
+    for key in @constructor.fields
+      # Use deep compare so we can look at actual primitives
+      if not Flakey.util.deep_compare(new_obj[key], old_obj[key])
+        switch new_obj[key].constructor
+          when Object
+            # Use $.extend as a bit of a hack to get a deep copy of the object instead of a reference.
+            save[key] = $.extend(true, {}, new_obj[key])
+          when Array
+            save[key] = $.extend(true, [], new_obj[key])
+          when String
+            # If the diff_text setting is on, save patch notes, instead of the actual text. This can be rebuilt later 
+            # on and often uses less storage space than saving whole strings.
+            old_obj[key] = if old_obj[key]? then old_obj[key].toString() else ''
+            if Flakey.settings.diff_text
+              patches = Flakey.diff_patch.patch_make(old_obj[key], new_obj[key])
+              save[key] = {
+                constructor: 'Patch'
+                patch_text: Flakey.diff_patch.patch_toText(patches)
+              }
+            else
+              save[key] = new_obj[key]
+          else
+            save[key] = new_obj[key]
+    return save
+  
+  # Freeze the instances current fields into an object and return it.
+  export: () ->
+    obj = {}
+    for field in @constructor.fields
+      obj[field] = @[field]
+    return obj
+  
+  # Given a version history and a version_id to stop at, evolve a blank object
+  # to the to the state at version_id. If version_id is ommited, evolve over the
+  # entire version history. If versions is ommited, get the version history of the
+  # current object.
+  evolve: (version_id, versions) ->
+    obj = {}
     
+    if versions == undefined or versions.constructor != Array
+      saved = Flakey.models.backend_controller.get(@constructor.model_name, @id)
+      versions = if saved? then saved.versions else {}
+    
+    # Evolve from nothing using the instructions in versions
+    for rev in versions
+      for own key, value of rev.fields
+        switch value.constructor
+          # If a diff contains a text patch, apply the patch.
+          when 'Patch'
+            patches = Flakey.diff_patch.patch_fromText(value.patch_text)
+            obj[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0]
+          when Object
+            # Use $.extend as a bit of a hack to get a deep copy of the object instead of a reference.
+            obj[key] = $.extend(true, {}, value)
+          when Array
+            obj[key] = $.extend(true, [], value)
+          else
+            obj[key] = value
+      if version_id != undefined and version_id == rev.version_id
+        return obj
+    return obj
+  
+  # Take a stored object from the backend controller, and loads it's data into this instance
+  import: (obj) ->
+    @versions = obj.versions
+    @id = obj.id
+    
+    # Reset fields
+    for key in @constructor.fields
+      @[key] = undefined
+    
+    # Load new fields
+    for own key, value of @evolve(undefined, @versions)
+      @[key] = value
+  
+  # Pop a version off the history array
+  pop_version: () ->
+    if @versions.length > 0
+      @versions.pop()
+    
+  # Push a diff onto the history array
+  push_version: (diff) ->
+    version_id = Flakey.util.guid()
+    version = {
+      version_id: version_id,
+      time: +(new Date()),
+      fields: $.extend(true, {}, diff)
+    }
+    Object.freeze(version)
+    @versions.push(version)
+  
+  # Write the version history into persistent storage.
   write: (callback) ->
     # Run this asynchronously so that server traffic doesn't lock the UI
     Flakey.util.async () =>
@@ -12316,6 +12367,8 @@ class Model
       Flakey.events.trigger(event_key, undefined)
 
 
+# The backend controler takes care of managing multiple storage backends and querying them for data.
+# You should **never** need to call any of these methods from outside this file.
 class BackendController
   constructor: () ->
     @delim = ':::'
@@ -12784,7 +12837,7 @@ class SocketIOBackend extends Backend
         status = false
     return status
 
-
+# Export into the main flakey object
 Flakey.models = {
   Model: Model,
   BackendController: BackendController,
@@ -12792,11 +12845,10 @@ Flakey.models = {
 }
 
 
-# ==========================================
-# Flakey.js Controllers
-# Craig Weber
-# ==========================================
-  
+# * * * * *
+# ## Controller Code
+
+# Subclass this to make controllers for your apps
 class Controller  
   constructor: (config = {}) ->
     @active = @active || false
@@ -12809,6 +12861,7 @@ class Controller
     @subcontrollers = @subcontrollers || []
     @query_params = @query_params || {}
     
+    # Build an HTML container to hold this controller
     @container = $(document.createElement('div'))
     @container.html(@container_html)
     @parent = config.parent || Flakey.settings.container
@@ -12817,15 +12870,18 @@ class Controller
     @container.attr('id', @id)
     for name in @class_name.split(' ')
       @container.addClass(name)
-      
+  
+  # Append another controller to this one. It will always mimic the active/passive state of this controller
   append: () ->
     for Contr in arguments
       contr = new Contr({parent: @parent})
       @subcontrollers.push(contr)
-    
+  
+  # Just a stub
   render: () ->
     @html('')
-      
+  
+  # Bind actions to JQuery events    
   bind_actions: () ->
     for own key, fn of @actions
       key_parts = key.split(' ')
@@ -12833,6 +12889,7 @@ class Controller
       selector = key_parts.join(' ')
       $(selector).bind(action, @[fn])
   
+  # Unbind actions from JQuery events
   unbind_actions: () ->
     for own key, fn of @actions
       key_parts = key.split(' ')
@@ -12840,11 +12897,13 @@ class Controller
       selector = key_parts.join(' ')
       $(selector).unbind(action)
   
+  # Set the container html to the given string. Generally you can pass the output of a template render right into this.
   html: (htm) ->
     @container_html = htm
     @container.html(@container_html)
     Flakey.events.trigger('html_updated')
-    
+  
+  # Make this controller active by setting its active class and binding events
   make_active: () ->
     @active = true
     @render()
@@ -12853,19 +12912,23 @@ class Controller
     for sub in @subcontrollers
       sub.make_active()
     
+  # Make this controller inactive and unbind its events.
   make_inactive: () ->
     @active = false
     @unbind_actions()
     @container.removeClass('active').addClass('passive')
     for sub in @subcontrollers
       sub.make_inactive()
-      
+  
+  # Set the @query_params attribute
   set_queryparams: (params) ->
     @query_params = params
     for sub in @subcontrollers
       sub.set_queryparams(params)
       
-      
+
+# Subclass a stack to manage a stack of controllers and make sure only one is ever visible at a time.
+# Very similar interface to an actual controller
 class Stack
   constructor: (config = {}) ->
     @id = @id || ''
@@ -12889,8 +12952,10 @@ class Stack
     for own name, contr of @controllers
       @controllers[name] = new contr({parent: @container})
     
+    # Make sure we resolve a controller any time the location hash changes.
     window.addEventListener('hashchange', @resolve, false)
     
+  # Resolve the location hash to a controller and make it active
   resolve: () =>
     hash = Flakey.util.get_hash()
     
@@ -12914,8 +12979,11 @@ class Stack
       return
     
     @active_controller = new_controller
+    
+    # Parse query params from the hash and send them to the active controller
     @controllers[@active_controller].set_queryparams(Flakey.util.querystring.parse(querystring))
     
+    # Make all the other controllers inactive
     for own name, controller of @controllers
       if name != @active_controller
         @controllers[name].make_inactive()
@@ -12926,6 +12994,7 @@ class Stack
         
     return @controllers[@active_controller]
   
+  # Make this stack active
   make_active: () ->
     @resolve()
     if @controllers[@active_controller] != undefined
@@ -12933,11 +13002,12 @@ class Stack
       @controllers[@active_controller].render()
     @active = true
         
+  # Make this stack inactive
   make_inactive: () ->
     if @controllers[@active_controller] != undefined
       @controllers[@active_controller].make_inactive()
     @active = false
-    
+  
   set_queryparams: (params) ->
     @query_params = params
   
@@ -12948,19 +13018,19 @@ Flakey.controllers = {
   Controller: Controller
 }
 
-# ==========================================
-# Flakey.js Views
-# Craig Weber
-# ==========================================
+# * * * * *
+# ## Basic wrapper around Eco templates
 
 class Template
   constructor: (eco, name) ->
     @eco = eco
     @name = name
     
+  # Render this template with the given context object, return the resulting string
   render: (context = {}) ->
     return @eco(context)
-    
+
+# Call this to load a Flakey.Template object from a compiled eco template.
 get_template = (name, tobj) ->
   template = tobj.ecoTemplates[name]
   return new Template(template, name)
@@ -12970,10 +13040,13 @@ Flakey.templates = {
   Template: Template
 }
 
-# ==========================================
-# Flakey.js Exports
-# Craig Weber
-# ==========================================
+# * * * * *
+# ## CommonJS exports
 
-module = {}
-module.exports = Flakey
+# Make this available via CommonJS'
+if module?
+  module.exports = Flakey
+
+# Assign it to the window object, if we're in a browser and a window exists.
+if window
+  window.Flakey = Flakey

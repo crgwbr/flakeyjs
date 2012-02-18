@@ -28,7 +28,7 @@
       var context;
       context = {
         selected: this.query_params.id,
-        notes: Note.objects.all()
+        notes: Note.all()
       };
       return this.html(this.tmpl.render(context));
     };
@@ -69,7 +69,7 @@
     NoteEditor.prototype.render = function() {
       var context;
       context = {};
-      context.note = Note.objects.get(this.query_params.id);
+      context.note = Note.get(this.query_params.id);
       if (context.note === void 0 || this.query_params.id === 'new') {
         context.note = new Note();
       }
@@ -80,7 +80,7 @@
 
     NoteEditor.prototype.save_note = function(event) {
       var note;
-      note = Note.objects.get(this.query_params.id);
+      note = Note.get(this.query_params.id);
       if (note === void 0) {
         note = new Note();
         note.id = $('#note-id').val();
@@ -100,7 +100,7 @@
 
     NoteEditor.prototype.delete_note = function(event) {
       var id, note;
-      note = Note.objects.get(this.query_params.id);
+      note = Note.get(this.query_params.id);
       if (!(note != null)) return;
       id = note.id;
       if (!confirm("Are you sure you'd like to delete this note?")) return;
@@ -116,7 +116,7 @@
     NoteEditor.prototype.evolve = function() {
       var note, time, version, version_id, version_index;
       version_index = parseInt($('#history-slider').val());
-      note = Note.objects.get(this.query_params.id);
+      note = Note.get(this.query_params.id);
       version_id = note.versions[version_index].version_id;
       time = new Date(note.versions[version_index].time);
       version = note.evolve(version_id);

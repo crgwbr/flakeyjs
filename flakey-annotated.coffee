@@ -1,4 +1,212 @@
 # * * * * *
+# # Flakey.js
+# See AUTHORS file for credits
+#
+# Flakey.js is compiled by concat'ing the src 
+# files in this directory in the following order:
+#  - flakey.coffee
+#  - util.coffee
+#  - models.coffee
+#  - controllers.coffee
+#  - views.coffee
+#  - exports.coffee
+# This assembled file is then saved in ../flakey.coffee
+# and compiled into ../flakey.js and ../flakey.min.js
+# 
+# This file is responsible for creating the main Flakey
+# object so that util/model/controller modules can 
+# later add themselves to it. We also initalize jQuery
+# in noconflict mode and assign it to Flakey.$
+# * * * * *
+
+# Setup the Flakey object with an instance of diff_match_patch and some default settings.
+Flakey = {
+  diff_patch: new diff_match_patch()
+  settings: {
+    diff_text: true
+    container: undefined
+    read_backend: 'memory'
+    base_model_endpoint: null #'/api'
+    socketio_server: null
+    enabled_local_backend: true
+  }
+  status: {
+    server_online: undefined 
+  }
+}
+
+# Put JQuery into No-Conflict mode, so that we don't interfere with any other library's
+jQuery.noConflict()
+$ = Flakey.$ = jQuery
+
+# Make JSON accessible too
+JSON = Flakey.JSON = JSON
+
+# Flakey's "contructor." This should be called on page load to customize settings and
+# init the model backend controller.
+Flakey.init = (config) ->
+  # Setup config
+  for own key, value of config
+    Flakey.settings[key] = value
+  
+  # Init this now so the new settings take effect
+  Flakey.models.backend_controller = new Flakey.models.BackendController()
+
+
+# * * * * *
+# ## Commonly useful utility functions
+
+Flakey.util = {
+  # Run a function asynchronously
+  async: (fn) ->
+    setTimeout(fn, 0)
+    
+  # Deep Compare 2 objects, recursing down through arrays and objects so that we can compare only primitive types
+  # Return true if they are equal
+  deep_compare: (a, b) ->
+    # Quick sanity check to make sure item's apear similar
+    if typeof a != typeof b
+      return false
+    
+    # Recursive lambda function to compare 2 objects
+    compare_objects = (a, b) ->
+      # Make sure a & b have the same keys
+      for key, value of a
+        if not b[key]?
+          return false
+      
+      for key, value of b
+        if not a[key]?
+          return false
+      
+      # Loop through all keys, either checking equality or recursing down another level
+      for key, value of a
+        if value
+          switch typeof value
+            when 'object'
+              if not compare_objects(value, b[key])
+                return false
+            else
+              if value != b[key]
+                return false
+        else
+          if b[key]
+            return false
+      
+      # Must be equal if we made it here
+      return true
+    
+    # Abuse JavaScript's typeof stupidity (everything except a primitive is an "object")
+    switch typeof a
+      when 'object'
+        if not compare_objects(a, b)
+          return false
+      else
+        if a != b
+          return false
+    
+    return true
+  
+  # GUID function from spine.js
+  # Generates a random GUID
+  # https://github.com/maccman/spine/blob/master/src/spine.coffee
+  guid: () ->
+    guid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
+    guid = guid.replace(/[xy]/g, (c) ->
+      r = Math.random() * 16 | 0
+      if c == 'x'
+        v = r 
+      else 
+        v = r & 3 | 8
+      v.toString(16).toUpperCase()
+      return v
+    )
+    return guid
+    
+  # Return current URL hash
+  get_hash: () ->
+    hash = window.location.hash
+    if hash.indexOf('#') == 0
+      hash = hash.slice(1)
+    return hash
+
+  # Querystring functions
+  querystring : {
+    # Parse a querystring and return an obj of key/values
+    parse: (str) ->
+      if not str or str.constructor != String
+        return {}
+      pairs = str.split('&')
+      params = {}
+      for pair in pairs
+        pair = pair.split('=')
+        key = decodeURIComponent(pair[0])
+        value = decodeURIComponent(pair[1])
+        params[key] = value
+      return params
+      
+    # Build a querystring out of an obj
+    build: (params) ->
+      if not params or params.constructor != Object
+        return ''
+      pairs = []
+      for own key, value of params
+        pairs.push "#{encodeURIComponent(key)}=#{encodeURIComponent(value)}"
+      return pairs.join('&')
+      
+    # Update the page's current querystring
+    # Settings merge to true will add your params to the current querystring. By default, your params wipe out the current querystring.
+    update: (params, merge = false) ->
+      hash = Flakey.util.get_hash()
+      if hash.indexOf('?')
+        hash = hash.split('?')
+        location = hash[0]
+        query = Flakey.util.querystring.parse(hash[1])
+      else
+        location = hash
+        query = {}
+      if merge
+        $.extend(query, params)
+      else
+        query = params
+      window.location.hash = "#{location}?#{Flakey.util.querystring.build(query)}"
+  }
+}
+
+  
+# Basic Observer Event System
+class Events
+  events: {}
+  
+  # Register a new function to be triggered by the given event. You may optionally provide a namespace
+  # to protect you app's events.
+  register: (event, fn, namespace = 'flakey') ->
+    if @events[namespace] == undefined
+      @events[namespace] = {}
+    if @events[namespace][event] == undefined
+      @events[namespace][event] = []
+    @events[namespace][event].push(fn)
+    return @events[namespace][event]
+  
+  # Trigger an event by passing it's name and optionally the namespace and data to send to each listening function
+  trigger: (event, namespace = 'flakey', data = {}) ->
+    if @events[namespace] == undefined
+      @events[namespace] = {}
+    if @events[namespace][event] == undefined
+      return
+    output = []
+    for fn in @events[namespace][event]
+      output.push(fn(event, namespace, data))
+    return output
+  
+  # Wipeout all registered functions from a namesapce. Dangerous.
+  clear: (namespace = 'flakey') ->
+    @events[namespace] = {}
+
+Flakey.events = new Events()
+
+
+# * * * * *
 # ## Model and model backend code
 
 # ### Subclass this to create you own models
@@ -676,3 +884,210 @@ Flakey.models = {
   BackendController: BackendController,
   backend_controller: null
 }
+
+
+# * * * * *
+# ## Controller Code
+
+# Subclass this to make controllers for your apps
+class Controller  
+  constructor: (config = {}) ->
+    @active = @active || false
+    @actions = @actions || {}
+    @id = @id || ''
+    @class_name = @class_name || ''
+    @parent = @parent || null
+    @container = @container || null
+    @container_html = @container_html || ''
+    @subcontrollers = @subcontrollers || []
+    @query_params = @query_params || {}
+    
+    # Build an HTML container to hold this controller
+    @container = $(document.createElement('div'))
+    @container.html(@container_html)
+    @parent = config.parent || Flakey.settings.container
+    @parent.append(@container)
+    
+    @container.attr('id', @id)
+    for name in @class_name.split(' ')
+      @container.addClass(name)
+  
+  # Append another controller to this one. It will always mimic the active/passive state of this controller
+  append: () ->
+    for Contr in arguments
+      contr = new Contr({parent: @parent})
+      @subcontrollers.push(contr)
+  
+  # Just a stub
+  render: () ->
+    @html('')
+  
+  # Bind actions to JQuery events    
+  bind_actions: () ->
+    for own key, fn of @actions
+      key_parts = key.split(' ')
+      action = key_parts.shift()
+      selector = key_parts.join(' ')
+      $(selector).bind(action, @[fn])
+  
+  # Unbind actions from JQuery events
+  unbind_actions: () ->
+    for own key, fn of @actions
+      key_parts = key.split(' ')
+      action = key_parts.shift()
+      selector = key_parts.join(' ')
+      $(selector).unbind(action)
+  
+  # Set the container html to the given string. Generally you can pass the output of a template render right into this.
+  html: (htm) ->
+    @container_html = htm
+    @container.html(@container_html)
+    Flakey.events.trigger('html_updated')
+  
+  # Make this controller active by setting its active class and binding events
+  make_active: () ->
+    @active = true
+    @render()
+    @bind_actions()
+    @container.removeClass('passive').addClass('active')
+    for sub in @subcontrollers
+      sub.make_active()
+    
+  # Make this controller inactive and unbind its events.
+  make_inactive: () ->
+    @active = false
+    @unbind_actions()
+    @container.removeClass('active').addClass('passive')
+    for sub in @subcontrollers
+      sub.make_inactive()
+  
+  # Set the @query_params attribute
+  set_queryparams: (params) ->
+    @query_params = params
+    for sub in @subcontrollers
+      sub.set_queryparams(params)
+      
+
+# Subclass a stack to manage a stack of controllers and make sure only one is ever visible at a time.
+# Very similar interface to an actual controller
+class Stack
+  constructor: (config = {}) ->
+    @id = @id || ''
+    @class_name = @class_name || ''
+    @active = @active || false
+    @controllers = @controllers || {}
+    @routes = @routes || {}
+    @default = @default || ''
+    @active_controller = @active_controller || ''
+    @parent = @parent || null
+    @query_params = @query_params || {}
+    
+    @container = $(document.createElement('div'))
+    @container.attr('id', @id)
+    for name in @class_name.split(' ')
+      @container.addClass(name)
+    @container.html(@container_html)
+    @parent = config.parent || Flakey.settings.container
+    @parent.append(@container)
+    
+    for own name, contr of @controllers
+      @controllers[name] = new contr({parent: @container})
+    
+    # Make sure we resolve a controller any time the location hash changes.
+    window.addEventListener('hashchange', @resolve, false)
+    
+  # Resolve the location hash to a controller and make it active
+  resolve: () =>
+    hash = Flakey.util.get_hash()
+    
+    new_controller = undefined
+    if hash.length > 0
+      if hash.indexOf('?') != -1
+        hash = hash.split('?')
+        location = hash[0]
+        querystring = hash[1]
+      else
+        location = hash
+        querystring = ''
+      new_controller = undefined
+      for own route, controller_name of @routes
+        regex = new RegExp(route)
+        if location.match(route)
+          new_controller = controller_name
+    
+    if not new_controller
+      window.location.hash = "##{@default}"
+      return
+    
+    @active_controller = new_controller
+    
+    # Parse query params from the hash and send them to the active controller
+    @controllers[@active_controller].set_queryparams(Flakey.util.querystring.parse(querystring))
+    
+    # Make all the other controllers inactive
+    for own name, controller of @controllers
+      if name != @active_controller
+        @controllers[name].make_inactive()
+        
+    if @active
+      @controllers[@active_controller].make_active()
+      @controllers[@active_controller].render()
+        
+    return @controllers[@active_controller]
+  
+  # Make this stack active
+  make_active: () ->
+    @resolve()
+    if @controllers[@active_controller] != undefined
+      @controllers[@active_controller].make_active()
+      @controllers[@active_controller].render()
+    @active = true
+        
+  # Make this stack inactive
+  make_inactive: () ->
+    if @controllers[@active_controller] != undefined
+      @controllers[@active_controller].make_inactive()
+    @active = false
+  
+  set_queryparams: (params) ->
+    @query_params = params
+  
+    
+
+Flakey.controllers = {
+  Stack: Stack,
+  Controller: Controller
+}
+
+# * * * * *
+# ## Basic wrapper around Eco templates
+
+class Template
+  constructor: (eco, name) ->
+    @eco = eco
+    @name = name
+    
+  # Render this template with the given context object, return the resulting string
+  render: (context = {}) ->
+    return @eco(context)
+
+# Call this to load a Flakey.Template object from a compiled eco template.
+get_template = (name, tobj) ->
+  template = tobj.ecoTemplates[name]
+  return new Template(template, name)
+
+Flakey.templates = {
+  get_template
+  Template: Template
+}
+
+# * * * * *
+# ## CommonJS exports
+
+# Make this available via CommonJS'
+if module?
+  module.exports = Flakey
+
+# Assign it to the window object, if we're in a browser and a window exists.
+if window
+  window.Flakey = Flakey
