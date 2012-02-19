@@ -1,4 +1,3 @@
-# * * * * *
 # ## Model and model backend code
 
 # ### Subclass this to create you own models
@@ -6,6 +5,7 @@ class Model
   @model_name: null
   @fields: ['id']
   
+  # If your model has a constructor, it should call this via super()
   constructor: (init_values) ->
     @id = Flakey.util.guid()
     @versions = []
@@ -23,15 +23,12 @@ class Model
       set.push(m)
     return set
     
-  # Query for a set of objects by a query object
-  # e.g. Model.find({name: 'sam'})
+  # Query for a set of objects by a query object. e.g. Model.find({name: 'sam'})
   @find: (query) ->
-    # Get data from the backend controller
     ar = Flakey.models.backend_controller.find(@model_name, query)
     if not ar.length
       return []
 
-    # Instantiate a set of objects from the found data
     set = []
     for item in ar
       m = new @()
@@ -58,11 +55,9 @@ class Model
   # Rollback this instance. If version_id is numeric, rollback that many versions. If it's a version_id, rollback to that version.
   rollback: (version_id) ->
     if parseInt(version_id) < @versions.length
-      # Rollback X number of versions
       for i in Array(parseInt(version_id))
         @pop_version()
     else
-      # Rollback to a version
       exists = false
       for version in @versions
         if version.version_id == version_id
@@ -85,7 +80,7 @@ class Model
     new_obj = @export()
     old_obj = @evolve()
     diff = @diff(new_obj, old_obj)
-    # Don't save empty versions
+    
     if Object.keys(diff).length > 0
       @push_version(diff)
       @write(callback)
@@ -97,9 +92,8 @@ class Model
   # Compares two objects (old and new) and returns a delta object representing the changes
   diff: (new_obj, old_obj) ->
     save = {}
-    # Only compare the fields we care about (dtaa fields in this model).
+    
     for key in @constructor.fields
-      # Use deep compare so we can look at actual primitives
       if not Flakey.util.deep_compare(new_obj[key], old_obj[key])
         switch new_obj[key].constructor
           when Object
@@ -108,8 +102,6 @@ class Model
           when Array
             save[key] = $.extend(true, [], new_obj[key])
           when String
-            # If the diff_text setting is on, save patch notes, instead of the actual text. This can be rebuilt later 
-            # on and often uses less storage space than saving whole strings.
             old_obj[key] = if old_obj[key]? then old_obj[key].toString() else ''
             if Flakey.settings.diff_text
               patches = Flakey.diff_patch.patch_make(old_obj[key], new_obj[key])
@@ -123,7 +115,7 @@ class Model
             save[key] = new_obj[key]
     return save
   
-  # Freeze the instances current fields into an object and return it.
+  # Freeze the instance's current fields into an object and return it.
   export: () ->
     obj = {}
     for field in @constructor.fields
@@ -141,16 +133,13 @@ class Model
       saved = Flakey.models.backend_controller.get(@constructor.model_name, @id)
       versions = if saved? then saved.versions else {}
     
-    # Evolve from nothing using the instructions in versions
     for rev in versions
       for own key, value of rev.fields
         switch value.constructor
-          # If a diff contains a text patch, apply the patch.
           when 'Patch'
             patches = Flakey.diff_patch.patch_fromText(value.patch_text)
             obj[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0]
           when Object
-            # Use $.extend as a bit of a hack to get a deep copy of the object instead of a reference.
             obj[key] = $.extend(true, {}, value)
           when Array
             obj[key] = $.extend(true, [], value)
@@ -165,11 +154,9 @@ class Model
     @versions = obj.versions
     @id = obj.id
     
-    # Reset fields
     for key in @constructor.fields
       @[key] = undefined
     
-    # Load new fields
     for own key, value of @evolve(undefined, @versions)
       @[key] = value
   
@@ -191,7 +178,6 @@ class Model
   
   # Write the version history into persistent storage.
   write: (callback) ->
-    # Run this asynchronously so that server traffic doesn't lock the UI
     Flakey.util.async () =>
       Flakey.models.backend_controller.save(@constructor.model_name, @id, @versions)
       if callback? then callback()
@@ -246,7 +232,8 @@ class BackendController
     
   find: (name, query) ->
     return @backends[@read].interface.find(name, query)
-    
+  
+  # Save an item to the backends
   save: (name, id, versions, backends = @backends) ->
     for own bname, backend of backends
       log_msg = 'save' + @delim + JSON.stringify([name, id, versions])
@@ -260,7 +247,8 @@ class BackendController
         @commit_logs()
         return false
     return true
-      
+  
+  # Delete an item frmo the backends
   delete: (name, id, backends = @backends) ->
     for own bname, backend of backends
       log_msg = 'delete' + @delim + JSON.stringify([name, id])
@@ -275,7 +263,7 @@ class BackendController
         return false
     return true
   
-  # Log methods
+  # Execute a backlog of transactions
   exec_log: () ->
     for own name, backend of @backends
       log = backend.pending_log
@@ -292,12 +280,14 @@ class BackendController
           else
             break;
     @commit_logs()
-          
+  
+  # Write log to localStorage
   commit_logs: (backends = @backends) ->
     for own name, backend of backends
       localStorage[backend.log_key] = JSON.stringify(backend.pending_log)
     return true
-      
+  
+  # Load logs from localStorage
   load_logs: (backends = @backends) ->
     for own name, backend of backends
       if not localStorage[backend.log_key]?
@@ -305,7 +295,7 @@ class BackendController
       backend.pending_log = JSON.parse(localStorage[backend.log_key])
     return true
       
-  # Backend Sync
+  # Sync backends
   sync: (name, backends = @backends) ->
     store = {}
     for own bname, backend of backends
@@ -325,7 +315,8 @@ class BackendController
     # Trigger the saved event
     event_key = "model_#{ name.toLowerCase() }_updated"
     Flakey.events.trigger(event_key, undefined)
-          
+  
+  # Merge 2 version lists
   merge_version_lists: (a, b) ->
     temp = {}
     for rev in a.concat(b)

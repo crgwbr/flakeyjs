@@ -1,4 +1,3 @@
-# * * * * *
 # ## Controller Code
 
 # Subclass this to make controllers for your apps

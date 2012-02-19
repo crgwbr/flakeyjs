@@ -1,25 +1,20 @@
-# * * * * *
 # # Flakey.js
 # See AUTHORS file for credits
 #
 # Flakey.js is compiled by concat'ing the src 
 # files in this directory in the following order:
-#  - flakey.coffee
-#  - util.coffee
-#  - models.coffee
-#  - controllers.coffee
-#  - views.coffee
-#  - exports.coffee
-# This assembled file is then saved in ../flakey.coffee
-# and compiled into ../flakey.js and ../flakey.min.js
-# 
-# This file is responsible for creating the main Flakey
-# object so that util/model/controller modules can 
-# later add themselves to it. We also initalize jQuery
-# in noconflict mode and assign it to Flakey.$
-# * * * * *
+#
+# 1. flakey.coffee
+# 2. util.coffee
+# 3. models.coffee
+# 4. controllers.coffee
+# 5. views.coffee
+# 6. exports.coffee
+#
+# This assembled file is then saved in `../flakey.coffee`
+# and compiled into `../flakey.js` and `../flakey.min.js`
 
-# Setup the Flakey object with an instance of diff_match_patch and some default settings.
+# ## Basic Setup
 Flakey = {
   diff_patch: new diff_match_patch()
   settings: {

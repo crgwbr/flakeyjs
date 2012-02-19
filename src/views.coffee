@@ -1,4 +1,3 @@
-# * * * * *
 # ## Basic wrapper around Eco templates
 
 class Template

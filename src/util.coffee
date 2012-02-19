@@ -1,21 +1,17 @@
-# * * * * *
-# ## Commonly useful utility functions
+# ## Common Utility Functions
 
 Flakey.util = {
   # Run a function asynchronously
   async: (fn) ->
     setTimeout(fn, 0)
     
-  # Deep Compare 2 objects, recursing down through arrays and objects so that we can compare only primitive types
-  # Return true if they are equal
+  # Deep Compare 2 objects, recursing down through arrays and objects so 
+  # that we can compare only primitive types. Return true if they are equal
   deep_compare: (a, b) ->
-    # Quick sanity check to make sure item's apear similar
     if typeof a != typeof b
       return false
     
-    # Recursive lambda function to compare 2 objects
     compare_objects = (a, b) ->
-      # Make sure a & b have the same keys
       for key, value of a
         if not b[key]?
           return false
@@ -24,7 +20,6 @@ Flakey.util = {
         if not a[key]?
           return false
       
-      # Loop through all keys, either checking equality or recursing down another level
       for key, value of a
         if value
           switch typeof value
@@ -38,10 +33,8 @@ Flakey.util = {
           if b[key]
             return false
       
-      # Must be equal if we made it here
       return true
     
-    # Abuse JavaScript's typeof stupidity (everything except a primitive is an "object")
     switch typeof a
       when 'object'
         if not compare_objects(a, b)
@@ -52,9 +45,7 @@ Flakey.util = {
     
     return true
   
-  # GUID function from spine.js
-  # Generates a random GUID
-  # https://github.com/maccman/spine/blob/master/src/spine.coffee
+  # GUID function from [spine.js](https://github.com/maccman/spine/blob/master/src/spine.coffee)
   guid: () ->
     guid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
     guid = guid.replace(/[xy]/g, (c) ->
@@ -75,7 +66,7 @@ Flakey.util = {
       hash = hash.slice(1)
     return hash
 
-  # Querystring functions
+  # ### Querystring functions
   querystring : {
     # Parse a querystring and return an obj of key/values
     parse: (str) ->
@@ -99,8 +90,9 @@ Flakey.util = {
         pairs.push "#{encodeURIComponent(key)}=#{encodeURIComponent(value)}"
       return pairs.join('&')
       
-    # Update the page's current querystring
-    # Settings merge to true will add your params to the current querystring. By default, your params wipe out the current querystring.
+    # Update the page's current querystring.
+    # Setting merge to true will add your params to the current querystring. 
+    # By default, your params wipe out the current querystring.
     update: (params, merge = false) ->
       hash = Flakey.util.get_hash()
       if hash.indexOf('?')
@@ -119,7 +111,7 @@ Flakey.util = {
 }
 
   
-# Basic Observer Event System
+# ### Basic Observer Event System
 class Events
   events: {}
   

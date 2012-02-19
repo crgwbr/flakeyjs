@@ -1,7 +1,6 @@
-# * * * * *
 # ## CommonJS exports
 
-# Make this available via CommonJS'
+# Make this available via CommonJS
 if module?
   module.exports = Flakey
 
