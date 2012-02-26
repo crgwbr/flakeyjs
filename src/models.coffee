@@ -68,6 +68,7 @@ class Model
       latest = @versions[@versions.length - 1]
       while latest.version_id != version_id and @versions.length > 1
         @pop_version()
+        latest = @versions[@versions.length - 1]
 
     @import {
       id: @id

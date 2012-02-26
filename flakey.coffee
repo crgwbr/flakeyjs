@@ -1,6 +1,6 @@
 # ==========================================
 # Version: 0.0.3
-# Compiled: Sat Feb 18 2012 21:17:46 GMT-0500 (EST)
+# Compiled: Sat Feb 25 2012 18:25:00 GMT-0500 (EST)
 
 # Contents:
 #   - src/lib/diff_match_patch.js
@@ -12222,6 +12222,7 @@ class Model
       latest = @versions[@versions.length - 1]
       while latest.version_id != version_id and @versions.length > 1
         @pop_version()
+        latest = @versions[@versions.length - 1]
 
     @import {
       id: @id

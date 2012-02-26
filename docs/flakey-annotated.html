@@ -561,6 +561,7 @@ to protect you app's events.</p>
       <span class="nv">latest = </span><span class="nx">@versions</span><span class="p">[</span><span class="nx">@versions</span><span class="p">.</span><span class="nx">length</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
       <span class="k">while</span> <span class="nx">latest</span><span class="p">.</span><span class="nx">version_id</span> <span class="o">!=</span> <span class="nx">version_id</span> <span class="o">and</span> <span class="nx">@versions</span><span class="p">.</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="mi">1</span>
         <span class="nx">@pop_version</span><span class="p">()</span>
+        <span class="nv">latest = </span><span class="nx">@versions</span><span class="p">[</span><span class="nx">@versions</span><span class="p">.</span><span class="nx">length</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
 
     <span class="nx">@import</span> <span class="p">{</span>
       <span class="nv">id: </span><span class="nx">@id</span>

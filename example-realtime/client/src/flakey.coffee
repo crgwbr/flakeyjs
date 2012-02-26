@@ -1,6 +1,6 @@
 # ==========================================
 # Version: 0.0.3
-# Compiled: Sat Feb 18 2012 17:24:32 GMT-0500 (EST)
+# Compiled: Sat Feb 25 2012 18:25:00 GMT-0500 (EST)
 
 # Contents:
 #   - src/lib/diff_match_patch.js
@@ -11957,28 +11957,23 @@ if (!JSON) {
     }
 }());`
 
-# * * * * *
 # # Flakey.js
 # See AUTHORS file for credits
 #
 # Flakey.js is compiled by concat'ing the src 
 # files in this directory in the following order:
-#  - flakey.coffee
-#  - util.coffee
-#  - models.coffee
-#  - controllers.coffee
-#  - views.coffee
-#  - exports.coffee
-# This assembled file is then saved in ../flakey.coffee
-# and compiled into ../flakey.js and ../flakey.min.js
-# 
-# This file is responsible for creating the main Flakey
-# object so that util/model/controller modules can 
-# later add themselves to it. We also initalize jQuery
-# in noconflict mode and assign it to Flakey.$
-# * * * * *
+#
+# 1. flakey.coffee
+# 2. util.coffee
+# 3. models.coffee
+# 4. controllers.coffee
+# 5. views.coffee
+# 6. exports.coffee
+#
+# This assembled file is then saved in `../flakey.coffee`
+# and compiled into `../flakey.js` and `../flakey.min.js`
 
-# Setup the Flakey object with an instance of diff_match_patch and some default settings.
+# ## Basic Setup
 Flakey = {
   diff_patch: new diff_match_patch()
   settings: {
@@ -12012,24 +12007,20 @@ Flakey.init = (config) ->
   Flakey.models.backend_controller = new Flakey.models.BackendController()
 
 
-# * * * * *
-# ## Commonly useful utility functions
+# ## Common Utility Functions
 
 Flakey.util = {
   # Run a function asynchronously
   async: (fn) ->
     setTimeout(fn, 0)
     
-  # Deep Compare 2 objects, recursing down through arrays and objects so that we can compare only primitive types
-  # Return true if they are equal
+  # Deep Compare 2 objects, recursing down through arrays and objects so 
+  # that we can compare only primitive types. Return true if they are equal
   deep_compare: (a, b) ->
-    # Quick sanity check to make sure item's apear similar
     if typeof a != typeof b
       return false
     
-    # Recursive lambda function to compare 2 objects
     compare_objects = (a, b) ->
-      # Make sure a & b have the same keys
       for key, value of a
         if not b[key]?
           return false
@@ -12038,7 +12029,6 @@ Flakey.util = {
         if not a[key]?
           return false
       
-      # Loop through all keys, either checking equality or recursing down another level
       for key, value of a
         if value
           switch typeof value
@@ -12052,10 +12042,8 @@ Flakey.util = {
           if b[key]
             return false
       
-      # Must be equal if we made it here
       return true
     
-    # Abuse JavaScript's typeof stupidity (everything except a primitive is an "object")
     switch typeof a
       when 'object'
         if not compare_objects(a, b)
@@ -12066,9 +12054,7 @@ Flakey.util = {
     
     return true
   
-  # GUID function from spine.js
-  # Generates a random GUID
-  # https://github.com/maccman/spine/blob/master/src/spine.coffee
+  # GUID function from [spine.js](https://github.com/maccman/spine/blob/master/src/spine.coffee)
   guid: () ->
     guid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
     guid = guid.replace(/[xy]/g, (c) ->
@@ -12089,7 +12075,7 @@ Flakey.util = {
       hash = hash.slice(1)
     return hash
 
-  # Querystring functions
+  # ### Querystring functions
   querystring : {
     # Parse a querystring and return an obj of key/values
     parse: (str) ->
@@ -12113,8 +12099,9 @@ Flakey.util = {
         pairs.push "#{encodeURIComponent(key)}=#{encodeURIComponent(value)}"
       return pairs.join('&')
       
-    # Update the page's current querystring
-    # Settings merge to true will add your params to the current querystring. By default, your params wipe out the current querystring.
+    # Update the page's current querystring.
+    # Setting merge to true will add your params to the current querystring. 
+    # By default, your params wipe out the current querystring.
     update: (params, merge = false) ->
       hash = Flakey.util.get_hash()
       if hash.indexOf('?')
@@ -12133,7 +12120,7 @@ Flakey.util = {
 }
 
   
-# Basic Observer Event System
+# ### Basic Observer Event System
 class Events
   events: {}
   
@@ -12165,7 +12152,6 @@ class Events
 Flakey.events = new Events()
 
 
-# * * * * *
 # ## Model and model backend code
 
 # ### Subclass this to create you own models
@@ -12173,6 +12159,7 @@ class Model
   @model_name: null
   @fields: ['id']
   
+  # If your model has a constructor, it should call this via super()
   constructor: (init_values) ->
     @id = Flakey.util.guid()
     @versions = []
@@ -12190,15 +12177,12 @@ class Model
       set.push(m)
     return set
     
-  # Query for a set of objects by a query object
-  # e.g. Model.find({name: 'sam'})
+  # Query for a set of objects by a query object. e.g. Model.find({name: 'sam'})
   @find: (query) ->
-    # Get data from the backend controller
     ar = Flakey.models.backend_controller.find(@model_name, query)
     if not ar.length
       return []
 
-    # Instantiate a set of objects from the found data
     set = []
     for item in ar
       m = new @()
@@ -12225,11 +12209,9 @@ class Model
   # Rollback this instance. If version_id is numeric, rollback that many versions. If it's a version_id, rollback to that version.
   rollback: (version_id) ->
     if parseInt(version_id) < @versions.length
-      # Rollback X number of versions
       for i in Array(parseInt(version_id))
         @pop_version()
     else
-      # Rollback to a version
       exists = false
       for version in @versions
         if version.version_id == version_id
@@ -12240,6 +12222,7 @@ class Model
       latest = @versions[@versions.length - 1]
       while latest.version_id != version_id and @versions.length > 1
         @pop_version()
+        latest = @versions[@versions.length - 1]
 
     @import {
       id: @id
@@ -12252,7 +12235,7 @@ class Model
     new_obj = @export()
     old_obj = @evolve()
     diff = @diff(new_obj, old_obj)
-    # Don't save empty versions
+    
     if Object.keys(diff).length > 0
       @push_version(diff)
       @write(callback)
@@ -12264,9 +12247,8 @@ class Model
   # Compares two objects (old and new) and returns a delta object representing the changes
   diff: (new_obj, old_obj) ->
     save = {}
-    # Only compare the fields we care about (dtaa fields in this model).
+    
     for key in @constructor.fields
-      # Use deep compare so we can look at actual primitives
       if not Flakey.util.deep_compare(new_obj[key], old_obj[key])
         switch new_obj[key].constructor
           when Object
@@ -12275,8 +12257,6 @@ class Model
           when Array
             save[key] = $.extend(true, [], new_obj[key])
           when String
-            # If the diff_text setting is on, save patch notes, instead of the actual text. This can be rebuilt later 
-            # on and often uses less storage space than saving whole strings.
             old_obj[key] = if old_obj[key]? then old_obj[key].toString() else ''
             if Flakey.settings.diff_text
               patches = Flakey.diff_patch.patch_make(old_obj[key], new_obj[key])
@@ -12290,7 +12270,7 @@ class Model
             save[key] = new_obj[key]
     return save
   
-  # Freeze the instances current fields into an object and return it.
+  # Freeze the instance's current fields into an object and return it.
   export: () ->
     obj = {}
     for field in @constructor.fields
@@ -12308,16 +12288,13 @@ class Model
       saved = Flakey.models.backend_controller.get(@constructor.model_name, @id)
       versions = if saved? then saved.versions else {}
     
-    # Evolve from nothing using the instructions in versions
     for rev in versions
       for own key, value of rev.fields
         switch value.constructor
-          # If a diff contains a text patch, apply the patch.
           when 'Patch'
             patches = Flakey.diff_patch.patch_fromText(value.patch_text)
             obj[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0]
           when Object
-            # Use $.extend as a bit of a hack to get a deep copy of the object instead of a reference.
             obj[key] = $.extend(true, {}, value)
           when Array
             obj[key] = $.extend(true, [], value)
@@ -12332,11 +12309,9 @@ class Model
     @versions = obj.versions
     @id = obj.id
     
-    # Reset fields
     for key in @constructor.fields
       @[key] = undefined
     
-    # Load new fields
     for own key, value of @evolve(undefined, @versions)
       @[key] = value
   
@@ -12358,7 +12333,6 @@ class Model
   
   # Write the version history into persistent storage.
   write: (callback) ->
-    # Run this asynchronously so that server traffic doesn't lock the UI
     Flakey.util.async () =>
       Flakey.models.backend_controller.save(@constructor.model_name, @id, @versions)
       if callback? then callback()
@@ -12413,7 +12387,8 @@ class BackendController
     
   find: (name, query) ->
     return @backends[@read].interface.find(name, query)
-    
+  
+  # Save an item to the backends
   save: (name, id, versions, backends = @backends) ->
     for own bname, backend of backends
       log_msg = 'save' + @delim + JSON.stringify([name, id, versions])
@@ -12427,7 +12402,8 @@ class BackendController
         @commit_logs()
         return false
     return true
-      
+  
+  # Delete an item frmo the backends
   delete: (name, id, backends = @backends) ->
     for own bname, backend of backends
       log_msg = 'delete' + @delim + JSON.stringify([name, id])
@@ -12442,7 +12418,7 @@ class BackendController
         return false
     return true
   
-  # Log methods
+  # Execute a backlog of transactions
   exec_log: () ->
     for own name, backend of @backends
       log = backend.pending_log
@@ -12459,12 +12435,14 @@ class BackendController
           else
             break;
     @commit_logs()
-          
+  
+  # Write log to localStorage
   commit_logs: (backends = @backends) ->
     for own name, backend of backends
       localStorage[backend.log_key] = JSON.stringify(backend.pending_log)
     return true
-      
+  
+  # Load logs from localStorage
   load_logs: (backends = @backends) ->
     for own name, backend of backends
       if not localStorage[backend.log_key]?
@@ -12472,7 +12450,7 @@ class BackendController
       backend.pending_log = JSON.parse(localStorage[backend.log_key])
     return true
       
-  # Backend Sync
+  # Sync backends
   sync: (name, backends = @backends) ->
     store = {}
     for own bname, backend of backends
@@ -12492,7 +12470,8 @@ class BackendController
     # Trigger the saved event
     event_key = "model_#{ name.toLowerCase() }_updated"
     Flakey.events.trigger(event_key, undefined)
-          
+  
+  # Merge 2 version lists
   merge_version_lists: (a, b) ->
     temp = {}
     for rev in a.concat(b)
@@ -12845,7 +12824,6 @@ Flakey.models = {
 }
 
 
-# * * * * *
 # ## Controller Code
 
 # Subclass this to make controllers for your apps
@@ -13018,7 +12996,6 @@ Flakey.controllers = {
   Controller: Controller
 }
 
-# * * * * *
 # ## Basic wrapper around Eco templates
 
 class Template
@@ -13040,10 +13017,9 @@ Flakey.templates = {
   Template: Template
 }
 
-# * * * * *
 # ## CommonJS exports
 
-# Make this available via CommonJS'
+# Make this available via CommonJS
 if module?
   module.exports = Flakey
 
