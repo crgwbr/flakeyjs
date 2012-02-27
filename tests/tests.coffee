@@ -3,6 +3,8 @@ $ = Flakey.$
 class Person extends Flakey.models.Model
   @model_name: 'Person', 
   @fields: ['id', 'first_name', 'last_name', 'email_address', 'phone_number']
+  
+window.Person = Person
 
 
 $(document).ready () ->

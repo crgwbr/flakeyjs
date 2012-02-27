@@ -1,13 +1,12 @@
 (function() {
-  var $, Person,
-    __hasProp = Object.prototype.hasOwnProperty,
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; };
+  var $, Person;
+  var __hasProp = Object.prototype.hasOwnProperty, __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; };
 
   $ = Flakey.$;
 
-  Person = (function(_super) {
+  Person = (function() {
 
-    __extends(Person, _super);
+    __extends(Person, Flakey.models.Model);
 
     function Person() {
       Person.__super__.constructor.apply(this, arguments);
@@ -19,7 +18,9 @@
 
     return Person;
 
-  })(Flakey.models.Model);
+  })();
+
+  window.Person = Person;
 
   $(document).ready(function() {
     var bdfl, john, settings;

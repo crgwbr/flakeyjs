@@ -240,6 +240,22 @@ class Model
     m.import(obj)
     return m
   
+  # Full Text Search fields based on the given string / regular expression
+  @search: (re, fields = @fields) ->
+    query = {}
+    for key in fields
+      query[key] = re
+    ar = Flakey.models.backend_controller.search(@model_name, query)
+    if not ar.length
+      return []
+
+    set = []
+    for item in ar
+      m = new @()
+      m.import(item)
+      set.push(m)
+    return set
+  
   # #### Public Methods
   # Delete this instance from all backends. Just like a real database, this is irreversible.
   delete: () ->
@@ -427,7 +443,10 @@ class BackendController
     return @backends[@read].interface.get(name, id)
     
   find: (name, query) ->
-    return @backends[@read].interface.find(name, query)
+    return @backends[@read].interface.find(name, query, false)
+    
+  search: (name, re) ->
+    return @backends[@read].interface.find(name, re, true)
   
   # Save an item to the backends
   save: (name, id, versions, backends = @backends) ->
@@ -444,7 +463,7 @@ class BackendController
         return false
     return true
   
-  # Delete an item frmo the backends
+  # Delete an item from the backends
   delete: (name, id, backends = @backends) ->
     for own bname, backend of backends
       log_msg = 'delete' + @delim + JSON.stringify([name, id])
@@ -543,6 +562,24 @@ class Backend
     if not store
       return []
     return store
+    
+  # Delete an item by id
+  delete: (name, id) ->
+    store = @_read(name)
+    index = @_query_by_id(name, id)
+    if index == -1
+      return true
+    store.splice(index, 1)
+    return @_write(name, store)
+    
+  # Find a set of objects from the given store by performing a query on them.
+  # Pass in an object of params to compare, ex: {title: ['eq', 'The Hitchhikers Guide'], vol: ['gt', 2]}
+  # Only looks at the latest version of an object, not any previous revisions
+  find: (name, query, full_text = false) ->
+    if full_text
+      return @_search(name, query)
+    else
+      return @_query(name, query)
   
   # Get an object from the given store by its id
   get: (name, id) ->
@@ -551,17 +588,6 @@ class Backend
     if index == -1
       return undefined
     return store[index]
-  
-  # Find a set of objects from the given store by performing a query on them.
-  # Pass in an object of params to compare, ex: {title: ['eq', 'The Hitchhikers Guide'], vol: ['gt', 2]}
-  # Only looks at the latest version of an object, not any previous revisions
-  find: (name, query) ->
-    store = @_read(name)
-    iset = @_query(name, query)
-    set = []
-    for i in iset
-      set.push(store[i])
-    return set
   
   # Save an object to the store  
   save: (name, id, versions) ->
@@ -578,30 +604,24 @@ class Backend
     else
       store[index] = obj
     return @_write(name, store)
-    
-  # Delete an item by id
-  delete: (name, id) ->
-    store = @_read(name)
-    index = @_query_by_id(name, id)
-    if index == -1
-      return true
-    store.splice(index, 1)
-    return @_write(name, store)
 
-  # Query for index set by performing search
+  # Query for set by performing search
   # This is SLOW
   _query: (name, query) ->
     store = @_read(name)
     if not store
       return []
+    
     set = []
-    i = 0
     for obj in store
       rendered = @_render_obj(obj)
+      match = true
       for own key, value of query
-        if rendered[key] == value
-          set.push(i)
-      i++
+        if rendered[key] != value
+          match = false
+      if match
+        set.push obj
+    
     return set
   
   # Query for index by id. Always returns single index, never a set
@@ -621,12 +641,38 @@ class Backend
     output = {}
     for rev in obj.versions
       for own key, value of rev.fields
-        if value.constructor == 'Patch'
-          patches = Flakey.diff_patch.patch_fromText(value.patch_text)
-          output[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0]
-        else
-          output[key] = value
-    return output
+        switch value.constructor
+          when 'Patch'
+            patches = Flakey.diff_patch.patch_fromText(value.patch_text)
+            obj[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0]
+          when Object
+            obj[key] = $.extend(true, {}, value)
+          when Array
+            obj[key] = $.extend(true, [], value)
+          else
+            obj[key] = value
+    return obj
+  
+  # Full Text Search
+  _search: (name, query) ->
+    store = @_read(name)
+    if not store
+      return []
+      
+    for own key, value of query
+      query[key] = new RegExp(value, "g")
+    
+    set = []
+    for obj in store
+      rendered = @_render_obj(obj)
+      match = false
+      for own key, value of query
+        if value.exec(rendered[key])
+          match = true
+      if match
+        set.push obj
+    
+    return set
     
 
 # Virtual Backend that simply stores data in an Object (window.memcache)

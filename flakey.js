@@ -1,4 +1,5 @@
 (function() {
+
   /**
  * Diff Match and Patch
  *
@@ -2186,6 +2187,7 @@ this['diff_match_patch'] = diff_match_patch;
 this['DIFF_DELETE'] = DIFF_DELETE;
 this['DIFF_INSERT'] = DIFF_INSERT;
 this['DIFF_EQUAL'] = DIFF_EQUAL;
+
   /*!
  * jQuery JavaScript Library v1.7.1
  * http://jquery.com/
@@ -11452,6 +11454,7 @@ if ( typeof define === "function" && define.amd && define.amd.jQuery ) {
 
 
 })( window );;
+
   /*
     http://www.JSON.org/json2.js
     2011-10-19
@@ -11939,11 +11942,9 @@ if (!JSON) {
         };
     }
 }());;
-  var $, Backend, BackendController, Controller, Events, Flakey, JSON, LocalBackend, MemoryBackend, Model, ServerBackend, SocketIOBackend, Stack, Template, get_template,
-    __hasProp = Object.prototype.hasOwnProperty,
-    __indexOf = Array.prototype.indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; },
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; },
-    __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
+
+  var $, Backend, BackendController, Controller, Events, Flakey, JSON, LocalBackend, MemoryBackend, Model, ServerBackend, SocketIOBackend, Stack, Template, get_template;
+  var __hasProp = Object.prototype.hasOwnProperty, __indexOf = Array.prototype.indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (__hasProp.call(this, i) && this[i] === item) return i; } return -1; }, __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; }, __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
 
   Flakey = {
     diff_patch: new diff_match_patch(),
@@ -12183,6 +12184,26 @@ if (!JSON) {
       return m;
     };
 
+    Model.search = function(re, fields) {
+      var ar, item, key, m, query, set, _i, _j, _len, _len2;
+      if (fields == null) fields = this.fields;
+      query = {};
+      for (_i = 0, _len = fields.length; _i < _len; _i++) {
+        key = fields[_i];
+        query[key] = re;
+      }
+      ar = Flakey.models.backend_controller.search(this.model_name, query);
+      if (!ar.length) return [];
+      set = [];
+      for (_j = 0, _len2 = ar.length; _j < _len2; _j++) {
+        item = ar[_j];
+        m = new this();
+        m["import"](item);
+        set.push(m);
+      }
+      return set;
+    };
+
     Model.prototype["delete"] = function() {
       var event_key;
       Flakey.models.backend_controller["delete"](this.constructor.model_name, this.id);
@@ -12408,7 +12429,11 @@ if (!JSON) {
     };
 
     BackendController.prototype.find = function(name, query) {
-      return this.backends[this.read].interface.find(name, query);
+      return this.backends[this.read].interface.find(name, query, false);
+    };
+
+    BackendController.prototype.search = function(name, re) {
+      return this.backends[this.read].interface.find(name, re, true);
     };
 
     BackendController.prototype.save = function(name, id, versions, backends) {
@@ -12585,24 +12610,30 @@ if (!JSON) {
       return store;
     };
 
+    Backend.prototype["delete"] = function(name, id) {
+      var index, store;
+      store = this._read(name);
+      index = this._query_by_id(name, id);
+      if (index === -1) return true;
+      store.splice(index, 1);
+      return this._write(name, store);
+    };
+
+    Backend.prototype.find = function(name, query, full_text) {
+      if (full_text == null) full_text = false;
+      if (full_text) {
+        return this._search(name, query);
+      } else {
+        return this._query(name, query);
+      }
+    };
+
     Backend.prototype.get = function(name, id) {
       var index, store;
       store = this._read(name);
       index = this._query_by_id(name, id);
       if (index === -1) return;
       return store[index];
-    };
-
-    Backend.prototype.find = function(name, query) {
-      var i, iset, set, store, _i, _len;
-      store = this._read(name);
-      iset = this._query(name, query);
-      set = [];
-      for (_i = 0, _len = iset.length; _i < _len; _i++) {
-        i = iset[_i];
-        set.push(store[i]);
-      }
-      return set;
     };
 
     Backend.prototype.save = function(name, id, versions) {
@@ -12622,30 +12653,21 @@ if (!JSON) {
       return this._write(name, store);
     };
 
-    Backend.prototype["delete"] = function(name, id) {
-      var index, store;
-      store = this._read(name);
-      index = this._query_by_id(name, id);
-      if (index === -1) return true;
-      store.splice(index, 1);
-      return this._write(name, store);
-    };
-
     Backend.prototype._query = function(name, query) {
-      var i, key, obj, rendered, set, store, value, _i, _len;
+      var key, match, obj, rendered, set, store, value, _i, _len;
       store = this._read(name);
       if (!store) return [];
       set = [];
-      i = 0;
       for (_i = 0, _len = store.length; _i < _len; _i++) {
         obj = store[_i];
         rendered = this._render_obj(obj);
+        match = true;
         for (key in query) {
           if (!__hasProp.call(query, key)) continue;
           value = query[key];
-          if (rendered[key] === value) set.push(i);
+          if (rendered[key] !== value) match = false;
         }
-        i++;
+        if (match) set.push(obj);
       }
       return set;
     };
@@ -12673,24 +12695,56 @@ if (!JSON) {
         for (key in _ref2) {
           if (!__hasProp.call(_ref2, key)) continue;
           value = _ref2[key];
-          if (value.constructor === 'Patch') {
-            patches = Flakey.diff_patch.patch_fromText(value.patch_text);
-            output[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0];
-          } else {
-            output[key] = value;
+          switch (value.constructor) {
+            case 'Patch':
+              patches = Flakey.diff_patch.patch_fromText(value.patch_text);
+              obj[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0];
+              break;
+            case Object:
+              obj[key] = $.extend(true, {}, value);
+              break;
+            case Array:
+              obj[key] = $.extend(true, [], value);
+              break;
+            default:
+              obj[key] = value;
           }
         }
       }
-      return output;
+      return obj;
+    };
+
+    Backend.prototype._search = function(name, query) {
+      var key, match, obj, rendered, set, store, value, _i, _len;
+      store = this._read(name);
+      if (!store) return [];
+      for (key in query) {
+        if (!__hasProp.call(query, key)) continue;
+        value = query[key];
+        query[key] = new RegExp(value, "g");
+      }
+      set = [];
+      for (_i = 0, _len = store.length; _i < _len; _i++) {
+        obj = store[_i];
+        rendered = this._render_obj(obj);
+        match = false;
+        for (key in query) {
+          if (!__hasProp.call(query, key)) continue;
+          value = query[key];
+          if (value.exec(rendered[key])) match = true;
+        }
+        if (match) set.push(obj);
+      }
+      return set;
     };
 
     return Backend;
 
   })();
 
-  MemoryBackend = (function(_super) {
+  MemoryBackend = (function() {
 
-    __extends(MemoryBackend, _super);
+    __extends(MemoryBackend, Backend);
 
     function MemoryBackend() {
       if (!window.memcache) window.memcache = {};
@@ -12707,11 +12761,11 @@ if (!JSON) {
 
     return MemoryBackend;
 
-  })(Backend);
+  })();
 
-  LocalBackend = (function(_super) {
+  LocalBackend = (function() {
 
-    __extends(LocalBackend, _super);
+    __extends(LocalBackend, Backend);
 
     function LocalBackend() {
       this.prefix = 'flakey-';
@@ -12733,11 +12787,11 @@ if (!JSON) {
 
     return LocalBackend;
 
-  })(Backend);
+  })();
 
-  ServerBackend = (function(_super) {
+  ServerBackend = (function() {
 
-    __extends(ServerBackend, _super);
+    __extends(ServerBackend, Backend);
 
     function ServerBackend() {
       this.server_cache = {};
@@ -12885,11 +12939,11 @@ if (!JSON) {
 
     return ServerBackend;
 
-  })(Backend);
+  })();
 
-  SocketIOBackend = (function(_super) {
+  SocketIOBackend = (function() {
 
-    __extends(SocketIOBackend, _super);
+    __extends(SocketIOBackend, Backend);
 
     function SocketIOBackend() {
       var _this = this;
@@ -12939,8 +12993,8 @@ if (!JSON) {
     };
 
     SocketIOBackend.prototype.save = function(name, id, versions, force_write) {
-      var cached_obj, proposed_obj,
-        _this = this;
+      var cached_obj, proposed_obj;
+      var _this = this;
       proposed_obj = {
         id: id,
         versions: versions
@@ -12999,7 +13053,7 @@ if (!JSON) {
 
     return SocketIOBackend;
 
-  })(Backend);
+  })();
 
   Flakey.models = {
     Model: Model,
