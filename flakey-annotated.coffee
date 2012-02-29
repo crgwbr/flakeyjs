@@ -576,10 +576,12 @@ class Backend
   # Pass in an object of params to compare, ex: {title: ['eq', 'The Hitchhikers Guide'], vol: ['gt', 2]}
   # Only looks at the latest version of an object, not any previous revisions
   find: (name, query, full_text = false) ->
-    if full_text
-      return @_search(name, query)
-    else
-      return @_query(name, query)
+    store = @_read(name)
+    set = if full_text then @_search(name, query) else @_query(name, query)
+    out = []
+    for i in set
+      out.push store[i]
+    return out
   
   # Get an object from the given store by its id
   get: (name, id) ->
@@ -605,7 +607,7 @@ class Backend
       store[index] = obj
     return @_write(name, store)
 
-  # Query for set by performing search
+  # Query for an index set by performing search
   # This is SLOW
   _query: (name, query) ->
     store = @_read(name)
@@ -613,6 +615,7 @@ class Backend
       return []
     
     set = []
+    i = 0
     for obj in store
       rendered = @_render_obj(obj)
       match = true
@@ -620,7 +623,8 @@ class Backend
         if rendered[key] != value
           match = false
       if match
-        set.push obj
+        set.push i
+      i++
     
     return set
   
@@ -663,6 +667,7 @@ class Backend
       query[key] = new RegExp(value, "g")
     
     set = []
+    i = 0
     for obj in store
       rendered = @_render_obj(obj)
       match = false
@@ -670,7 +675,8 @@ class Backend
         if value.exec(rendered[key])
           match = true
       if match
-        set.push obj
+        set.push i
+      i++
     
     return set
     
@@ -682,10 +688,10 @@ class MemoryBackend extends Backend
       window.memcache = {}
     
   _read: (name) ->
-    return window.memcache[name]
+    return $.extend(true, [], window.memcache[name])
     
   _write: (name, store) ->
-    window.memcache[name] = store
+    window.memcache[name] = $.extend(true, [], store)
     return true
 
 
