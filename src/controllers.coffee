@@ -38,16 +38,26 @@ class Controller
     for own key, fn of @actions
       key_parts = key.split(' ')
       action = key_parts.shift()
+      
+      hotkey = ""
+      if action in ['keydown', 'keyup', 'keypress']
+        hotkey = key_parts.shift()
+      if (hotkey.indexOf('#') != -1 or hotkey.indexOf('.') != -1) and hotkey.indexOf('+') == -1
+        key_parts.shift(hotkey)
+        hotkey = ""
       selector = key_parts.join(' ')
-      $(selector).bind(action, @[fn])
+      
+      if selector.length <= 0
+        selector = document
+      
+      if hotkey
+        $(selector).bind(action, hotkey, @[fn])
+      else
+        $(selector).bind(action, @[fn])
   
   # Unbind actions from JQuery events
   unbind_actions: () ->
-    for own key, fn of @actions
-      key_parts = key.split(' ')
-      action = key_parts.shift()
-      selector = key_parts.join(' ')
-      $(selector).unbind(action)
+    $(document).unbind()
   
   # Set the container html to the given string. Generally you can pass the output of a template render right into this.
   html: (htm) ->

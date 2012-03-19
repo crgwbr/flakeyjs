@@ -1,4 +1,5 @@
 (function() {
+
   /**
  * Diff Match and Patch
  *
@@ -2186,6 +2187,7 @@ this['diff_match_patch'] = diff_match_patch;
 this['DIFF_DELETE'] = DIFF_DELETE;
 this['DIFF_INSERT'] = DIFF_INSERT;
 this['DIFF_EQUAL'] = DIFF_EQUAL;
+
   /*!
  * jQuery JavaScript Library v1.7.1
  * http://jquery.com/
@@ -11452,6 +11454,107 @@ if ( typeof define === "function" && define.amd && define.amd.jQuery ) {
 
 
 })( window );;
+
+  /*
+ * jQuery Hotkeys Plugin
+ * Copyright 2010, John Resig
+ * Dual licensed under the MIT or GPL Version 2 licenses.
+ *
+ * Based upon the plugin by Tzury Bar Yochay:
+ * http://github.com/tzuryby/hotkeys
+ *
+ * Original idea by:
+ * Binny V A, http://www.openjs.com/scripts/events/keyboard_shortcuts/
+*/
+
+(function(jQuery){
+	
+	jQuery.hotkeys = {
+		version: "0.8",
+
+		specialKeys: {
+			8: "backspace", 9: "tab", 13: "return", 16: "shift", 17: "ctrl", 18: "alt", 19: "pause",
+			20: "capslock", 27: "esc", 32: "space", 33: "pageup", 34: "pagedown", 35: "end", 36: "home",
+			37: "left", 38: "up", 39: "right", 40: "down", 45: "insert", 46: "del", 
+			96: "0", 97: "1", 98: "2", 99: "3", 100: "4", 101: "5", 102: "6", 103: "7",
+			104: "8", 105: "9", 106: "*", 107: "+", 109: "-", 110: ".", 111 : "/", 
+			112: "f1", 113: "f2", 114: "f3", 115: "f4", 116: "f5", 117: "f6", 118: "f7", 119: "f8", 
+			120: "f9", 121: "f10", 122: "f11", 123: "f12", 144: "numlock", 145: "scroll", 191: "/", 224: "meta"
+		},
+	
+		shiftNums: {
+			"\`": "~", "1": "!", "2": "@", "3": "#", "4": "$", "5": "%", "6": "^", "7": "&", 
+			"8": "*", "9": "(", "0": ")", "-": "_", "=": "+", ";": ": ", "'": "\"", ",": "<", 
+			".": ">",  "/": "?",  "\\": "|"
+		}
+	};
+
+	function keyHandler( handleObj ) {
+		// Only care when a possible input has been specified
+		if ( typeof handleObj.data !== "string" ) {
+			return;
+		}
+		
+		var origHandler = handleObj.handler,
+			keys = handleObj.data.toLowerCase().split(" ");
+	
+		handleObj.handler = function( event ) {
+			// Don't fire in text-accepting inputs that we didn't directly bind to
+			if ( this !== event.target && (/textarea|select/i.test( event.target.nodeName ) ||
+				 event.target.type === "text") ) {
+				return;
+			}
+			
+			// Keypress represents characters, not special keys
+			var special = event.type !== "keypress" && jQuery.hotkeys.specialKeys[ event.which ],
+				character = String.fromCharCode( event.which ).toLowerCase(),
+				key, modif = "", possible = {};
+
+			// check combinations (alt|ctrl|shift+anything)
+			if ( event.altKey && special !== "alt" ) {
+				modif += "alt+";
+			}
+
+			if ( event.ctrlKey && special !== "ctrl" ) {
+				modif += "ctrl+";
+			}
+			
+			// TODO: Need to make sure this works consistently across platforms
+			if ( event.metaKey && !event.ctrlKey && special !== "meta" ) {
+				modif += "meta+";
+			}
+
+			if ( event.shiftKey && special !== "shift" ) {
+				modif += "shift+";
+			}
+
+			if ( special ) {
+				possible[ modif + special ] = true;
+
+			} else {
+				possible[ modif + character ] = true;
+				possible[ modif + jQuery.hotkeys.shiftNums[ character ] ] = true;
+
+				// "$" can be triggered as "Shift+4" or "Shift+$" or just "$"
+				if ( modif === "shift+" ) {
+					possible[ jQuery.hotkeys.shiftNums[ character ] ] = true;
+				}
+			}
+
+			for ( var i = 0, l = keys.length; i < l; i++ ) {
+				if ( possible[ keys[i] ] ) {
+					return origHandler.apply( this, arguments );
+				}
+			}
+		};
+	}
+
+	jQuery.each([ "keydown", "keyup", "keypress" ], function() {
+		jQuery.event.special[ this ] = { add: keyHandler };
+	});
+
+})( jQuery );;
+
   /*
     http://www.JSON.org/json2.js
     2011-10-19
@@ -11939,11 +12042,9 @@ if (!JSON) {
         };
     }
 }());;
-  var $, Backend, BackendController, Controller, Events, Flakey, JSON, LocalBackend, MemoryBackend, Model, ServerBackend, SocketIOBackend, Stack, Template, get_template,
-    __hasProp = Object.prototype.hasOwnProperty,
-    __indexOf = Array.prototype.indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; },
-    __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; },
-    __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
+
+  var $, Backend, BackendController, Controller, Events, Flakey, JSON, LocalBackend, MemoryBackend, Model, ServerBackend, SocketIOBackend, Stack, Template, get_template;
+  var __hasProp = Object.prototype.hasOwnProperty, __indexOf = Array.prototype.indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (__hasProp.call(this, i) && this[i] === item) return i; } return -1; }, __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; }, __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; };
 
   Flakey = {
     diff_patch: new diff_match_patch(),
@@ -12749,9 +12850,9 @@ if (!JSON) {
 
   })();
 
-  MemoryBackend = (function(_super) {
+  MemoryBackend = (function() {
 
-    __extends(MemoryBackend, _super);
+    __extends(MemoryBackend, Backend);
 
     function MemoryBackend() {
       if (!window.memcache) window.memcache = {};
@@ -12768,11 +12869,11 @@ if (!JSON) {
 
     return MemoryBackend;
 
-  })(Backend);
+  })();
 
-  LocalBackend = (function(_super) {
+  LocalBackend = (function() {
 
-    __extends(LocalBackend, _super);
+    __extends(LocalBackend, Backend);
 
     function LocalBackend() {
       this.prefix = 'flakey-';
@@ -12794,11 +12895,11 @@ if (!JSON) {
 
     return LocalBackend;
 
-  })(Backend);
+  })();
 
-  ServerBackend = (function(_super) {
+  ServerBackend = (function() {
 
-    __extends(ServerBackend, _super);
+    __extends(ServerBackend, Backend);
 
     function ServerBackend() {
       this.server_cache = {};
@@ -12946,11 +13047,11 @@ if (!JSON) {
 
     return ServerBackend;
 
-  })(Backend);
+  })();
 
-  SocketIOBackend = (function(_super) {
+  SocketIOBackend = (function() {
 
-    __extends(SocketIOBackend, _super);
+    __extends(SocketIOBackend, Backend);
 
     function SocketIOBackend() {
       var _this = this;
@@ -13000,8 +13101,8 @@ if (!JSON) {
     };
 
     SocketIOBackend.prototype.save = function(name, id, versions, force_write) {
-      var cached_obj, proposed_obj,
-        _this = this;
+      var cached_obj, proposed_obj;
+      var _this = this;
       proposed_obj = {
         id: id,
         versions: versions
@@ -13060,7 +13161,7 @@ if (!JSON) {
 
     return SocketIOBackend;
 
-  })(Backend);
+  })();
 
   Flakey.models = {
     Model: Model,
@@ -13112,7 +13213,7 @@ if (!JSON) {
     };
 
     Controller.prototype.bind_actions = function() {
-      var action, fn, key, key_parts, selector, _ref, _results;
+      var action, fn, hotkey, key, key_parts, selector, _ref, _results;
       _ref = this.actions;
       _results = [];
       for (key in _ref) {
@@ -13120,25 +13221,27 @@ if (!JSON) {
         fn = _ref[key];
         key_parts = key.split(' ');
         action = key_parts.shift();
+        hotkey = "";
+        if (action === 'keydown' || action === 'keyup' || action === 'keypress') {
+          hotkey = key_parts.shift();
+        }
+        if ((hotkey.indexOf('#') !== -1 || hotkey.indexOf('.') !== -1) && hotkey.indexOf('+') === -1) {
+          key_parts.shift(hotkey);
+          hotkey = "";
+        }
         selector = key_parts.join(' ');
-        _results.push($(selector).bind(action, this[fn]));
+        if (selector.length <= 0) selector = document;
+        if (hotkey) {
+          _results.push($(selector).bind(action, hotkey, this[fn]));
+        } else {
+          _results.push($(selector).bind(action, this[fn]));
+        }
       }
       return _results;
     };
 
     Controller.prototype.unbind_actions = function() {
-      var action, fn, key, key_parts, selector, _ref, _results;
-      _ref = this.actions;
-      _results = [];
-      for (key in _ref) {
-        if (!__hasProp.call(_ref, key)) continue;
-        fn = _ref[key];
-        key_parts = key.split(' ');
-        action = key_parts.shift();
-        selector = key_parts.join(' ');
-        _results.push($(selector).unbind(action));
-      }
-      return _results;
+      return $(document).unbind();
     };
 
     Controller.prototype.html = function(htm) {

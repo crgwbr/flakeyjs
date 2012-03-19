@@ -11453,6 +11453,105 @@ if ( typeof define === "function" && define.amd && define.amd.jQuery ) {
 
 })( window );;
   /*
+ * jQuery Hotkeys Plugin
+ * Copyright 2010, John Resig
+ * Dual licensed under the MIT or GPL Version 2 licenses.
+ *
+ * Based upon the plugin by Tzury Bar Yochay:
+ * http://github.com/tzuryby/hotkeys
+ *
+ * Original idea by:
+ * Binny V A, http://www.openjs.com/scripts/events/keyboard_shortcuts/
+*/
+
+(function(jQuery){
+	
+	jQuery.hotkeys = {
+		version: "0.8",
+
+		specialKeys: {
+			8: "backspace", 9: "tab", 13: "return", 16: "shift", 17: "ctrl", 18: "alt", 19: "pause",
+			20: "capslock", 27: "esc", 32: "space", 33: "pageup", 34: "pagedown", 35: "end", 36: "home",
+			37: "left", 38: "up", 39: "right", 40: "down", 45: "insert", 46: "del", 
+			96: "0", 97: "1", 98: "2", 99: "3", 100: "4", 101: "5", 102: "6", 103: "7",
+			104: "8", 105: "9", 106: "*", 107: "+", 109: "-", 110: ".", 111 : "/", 
+			112: "f1", 113: "f2", 114: "f3", 115: "f4", 116: "f5", 117: "f6", 118: "f7", 119: "f8", 
+			120: "f9", 121: "f10", 122: "f11", 123: "f12", 144: "numlock", 145: "scroll", 191: "/", 224: "meta"
+		},
+	
+		shiftNums: {
+			"\`": "~", "1": "!", "2": "@", "3": "#", "4": "$", "5": "%", "6": "^", "7": "&", 
+			"8": "*", "9": "(", "0": ")", "-": "_", "=": "+", ";": ": ", "'": "\"", ",": "<", 
+			".": ">",  "/": "?",  "\\": "|"
+		}
+	};
+
+	function keyHandler( handleObj ) {
+		// Only care when a possible input has been specified
+		if ( typeof handleObj.data !== "string" ) {
+			return;
+		}
+		
+		var origHandler = handleObj.handler,
+			keys = handleObj.data.toLowerCase().split(" ");
+	
+		handleObj.handler = function( event ) {
+			// Don't fire in text-accepting inputs that we didn't directly bind to
+			if ( this !== event.target && (/textarea|select/i.test( event.target.nodeName ) ||
+				 event.target.type === "text") ) {
+				return;
+			}
+			
+			// Keypress represents characters, not special keys
+			var special = event.type !== "keypress" && jQuery.hotkeys.specialKeys[ event.which ],
+				character = String.fromCharCode( event.which ).toLowerCase(),
+				key, modif = "", possible = {};
+
+			// check combinations (alt|ctrl|shift+anything)
+			if ( event.altKey && special !== "alt" ) {
+				modif += "alt+";
+			}
+
+			if ( event.ctrlKey && special !== "ctrl" ) {
+				modif += "ctrl+";
+			}
+			
+			// TODO: Need to make sure this works consistently across platforms
+			if ( event.metaKey && !event.ctrlKey && special !== "meta" ) {
+				modif += "meta+";
+			}
+
+			if ( event.shiftKey && special !== "shift" ) {
+				modif += "shift+";
+			}
+
+			if ( special ) {
+				possible[ modif + special ] = true;
+
+			} else {
+				possible[ modif + character ] = true;
+				possible[ modif + jQuery.hotkeys.shiftNums[ character ] ] = true;
+
+				// "$" can be triggered as "Shift+4" or "Shift+$" or just "$"
+				if ( modif === "shift+" ) {
+					possible[ jQuery.hotkeys.shiftNums[ character ] ] = true;
+				}
+			}
+
+			for ( var i = 0, l = keys.length; i < l; i++ ) {
+				if ( possible[ keys[i] ] ) {
+					return origHandler.apply( this, arguments );
+				}
+			}
+		};
+	}
+
+	jQuery.each([ "keydown", "keyup", "keypress" ], function() {
+		jQuery.event.special[ this ] = { add: keyHandler };
+	});
+
+})( jQuery );;
+  /*
     http://www.JSON.org/json2.js
     2011-10-19
 
@@ -12183,6 +12282,26 @@ if (!JSON) {
       return m;
     };
 
+    Model.search = function(re, fields) {
+      var ar, item, key, m, query, set, _i, _j, _len, _len2;
+      if (fields == null) fields = this.fields;
+      query = {};
+      for (_i = 0, _len = fields.length; _i < _len; _i++) {
+        key = fields[_i];
+        query[key] = re;
+      }
+      ar = Flakey.models.backend_controller.search(this.model_name, query);
+      if (!ar.length) return [];
+      set = [];
+      for (_j = 0, _len2 = ar.length; _j < _len2; _j++) {
+        item = ar[_j];
+        m = new this();
+        m["import"](item);
+        set.push(m);
+      }
+      return set;
+    };
+
     Model.prototype["delete"] = function() {
       var event_key;
       Flakey.models.backend_controller["delete"](this.constructor.model_name, this.id);
@@ -12211,6 +12330,7 @@ if (!JSON) {
         latest = this.versions[this.versions.length - 1];
         while (latest.version_id !== version_id && this.versions.length > 1) {
           this.pop_version();
+          latest = this.versions[this.versions.length - 1];
         }
       }
       this["import"]({
@@ -12407,7 +12527,11 @@ if (!JSON) {
     };
 
     BackendController.prototype.find = function(name, query) {
-      return this.backends[this.read].interface.find(name, query);
+      return this.backends[this.read].interface.find(name, query, false);
+    };
+
+    BackendController.prototype.search = function(name, re) {
+      return this.backends[this.read].interface.find(name, re, true);
     };
 
     BackendController.prototype.save = function(name, id, versions, backends) {
@@ -12584,24 +12708,34 @@ if (!JSON) {
       return store;
     };
 
+    Backend.prototype["delete"] = function(name, id) {
+      var index, store;
+      store = this._read(name);
+      index = this._query_by_id(name, id);
+      if (index === -1) return true;
+      store.splice(index, 1);
+      return this._write(name, store);
+    };
+
+    Backend.prototype.find = function(name, query, full_text) {
+      var i, out, set, store, _i, _len;
+      if (full_text == null) full_text = false;
+      store = this._read(name);
+      set = full_text ? this._search(name, query) : this._query(name, query);
+      out = [];
+      for (_i = 0, _len = set.length; _i < _len; _i++) {
+        i = set[_i];
+        out.push(store[i]);
+      }
+      return out;
+    };
+
     Backend.prototype.get = function(name, id) {
       var index, store;
       store = this._read(name);
       index = this._query_by_id(name, id);
       if (index === -1) return;
       return store[index];
-    };
-
-    Backend.prototype.find = function(name, query) {
-      var i, iset, set, store, _i, _len;
-      store = this._read(name);
-      iset = this._query(name, query);
-      set = [];
-      for (_i = 0, _len = iset.length; _i < _len; _i++) {
-        i = iset[_i];
-        set.push(store[i]);
-      }
-      return set;
     };
 
     Backend.prototype.save = function(name, id, versions) {
@@ -12621,17 +12755,8 @@ if (!JSON) {
       return this._write(name, store);
     };
 
-    Backend.prototype["delete"] = function(name, id) {
-      var index, store;
-      store = this._read(name);
-      index = this._query_by_id(name, id);
-      if (index === -1) return true;
-      store.splice(index, 1);
-      return this._write(name, store);
-    };
-
     Backend.prototype._query = function(name, query) {
-      var i, key, obj, rendered, set, store, value, _i, _len;
+      var i, key, match, obj, rendered, set, store, value, _i, _len;
       store = this._read(name);
       if (!store) return [];
       set = [];
@@ -12639,11 +12764,13 @@ if (!JSON) {
       for (_i = 0, _len = store.length; _i < _len; _i++) {
         obj = store[_i];
         rendered = this._render_obj(obj);
+        match = true;
         for (key in query) {
           if (!__hasProp.call(query, key)) continue;
           value = query[key];
-          if (rendered[key] === value) set.push(i);
+          if (rendered[key] !== value) match = false;
         }
+        if (match) set.push(i);
         i++;
       }
       return set;
@@ -12672,15 +12799,49 @@ if (!JSON) {
         for (key in _ref2) {
           if (!__hasProp.call(_ref2, key)) continue;
           value = _ref2[key];
-          if (value.constructor === 'Patch') {
-            patches = Flakey.diff_patch.patch_fromText(value.patch_text);
-            output[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0];
-          } else {
-            output[key] = value;
+          switch (value.constructor) {
+            case 'Patch':
+              patches = Flakey.diff_patch.patch_fromText(value.patch_text);
+              obj[key] = Flakey.diff_patch.patch_apply(patches, obj[key] || '')[0];
+              break;
+            case Object:
+              obj[key] = $.extend(true, {}, value);
+              break;
+            case Array:
+              obj[key] = $.extend(true, [], value);
+              break;
+            default:
+              obj[key] = value;
           }
         }
       }
-      return output;
+      return obj;
+    };
+
+    Backend.prototype._search = function(name, query) {
+      var i, key, match, obj, rendered, set, store, value, _i, _len;
+      store = this._read(name);
+      if (!store) return [];
+      for (key in query) {
+        if (!__hasProp.call(query, key)) continue;
+        value = query[key];
+        query[key] = new RegExp(value, "g");
+      }
+      set = [];
+      i = 0;
+      for (_i = 0, _len = store.length; _i < _len; _i++) {
+        obj = store[_i];
+        rendered = this._render_obj(obj);
+        match = false;
+        for (key in query) {
+          if (!__hasProp.call(query, key)) continue;
+          value = query[key];
+          if (value.exec(rendered[key])) match = true;
+        }
+        if (match) set.push(i);
+        i++;
+      }
+      return set;
     };
 
     return Backend;
@@ -12696,11 +12857,11 @@ if (!JSON) {
     }
 
     MemoryBackend.prototype._read = function(name) {
-      return window.memcache[name];
+      return $.extend(true, [], window.memcache[name]);
     };
 
     MemoryBackend.prototype._write = function(name, store) {
-      window.memcache[name] = store;
+      window.memcache[name] = $.extend(true, [], store);
       return true;
     };
 
@@ -13050,7 +13211,7 @@ if (!JSON) {
     };
 
     Controller.prototype.bind_actions = function() {
-      var action, fn, key, key_parts, selector, _ref, _results;
+      var action, fn, hotkey, key, key_parts, selector, _ref, _results;
       _ref = this.actions;
       _results = [];
       for (key in _ref) {
@@ -13058,8 +13219,15 @@ if (!JSON) {
         fn = _ref[key];
         key_parts = key.split(' ');
         action = key_parts.shift();
+        if (action === 'keydown' || action === 'keyup' || action === 'keypress') {
+          hotkey = key_parts.shift();
+        }
         selector = key_parts.join(' ');
-        _results.push($(selector).bind(action, this[fn]));
+        if (hotkey) {
+          _results.push($(document).bind(action, hotkey, this[fn]));
+        } else {
+          _results.push($(selector).bind(action, this[fn]));
+        }
       }
       return _results;
     };
