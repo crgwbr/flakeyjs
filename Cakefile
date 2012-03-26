@@ -3,7 +3,7 @@ fs     = require 'fs'
 
 appFiles  = [
   'lib/diff_match_patch.js'
-  'lib/jquery-1.7.1.js'
+  'lib/jquery-1.7.2.min.js'
   'lib/jquery.hotkeys.js'
   'lib/JSON2.js'
   'flakey.coffee'
