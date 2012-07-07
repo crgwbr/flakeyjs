@@ -70,7 +70,7 @@ task 'runserver', 'Run dev server in public/ at localhost:8000', ->
         write(404, "cannot ask for files with .. in the name\n")
         return
 
-      path.exists pathname, (exists) ->
+      fs.exists pathname, (exists) ->
         if !exists
           write(404, "cannot find that file\n")
           return
