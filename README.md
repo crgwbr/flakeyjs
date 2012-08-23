@@ -1,3 +1,4 @@
+[![build status](https://secure.travis-ci.org/crgwbr/flakeyjs.png)](http://travis-ci.org/crgwbr/flakeyjs)
 # Flakey.js
 
 ### Whats Flakey.js
